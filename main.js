@@ -88,16 +88,16 @@ function getDefaultWeekData(weekIso) {
       "sel-prayer-2": isBaseWeek ? "Darly Fassarela" : ""
     },
     inlineTexts: {
-      "txt-song-intro": "Cântico 21",
+      "txt-song-intro": "Cântico",
       "txt-comments-intro": "Comentários iniciais",
       "txt-treasure-p1": "1. Tesouros ",
       "txt-treasure-p2": "2. Joias espirituais",
       "txt-treasure-p3": "3. Leitura da Bíblia",
-      "txt-song-middle": "Cântico 100",
+      "txt-song-middle": "Cântico",
       "txt-life-p1": "Necessidades Locais",
       "txt-life-p2": "Estudo bíblico de congregação",
       "txt-comments-outro": "Comentários finais",
-      "txt-song-outro": "Cântico 42"
+      "txt-song-outro": "Cântico"
     },
     times: {
       "sel-time-comments-intro": "1",
