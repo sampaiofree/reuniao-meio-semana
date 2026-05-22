@@ -1171,7 +1171,22 @@ function renderPeopleTable() {
     // Gender
     const tdGender = document.createElement("td");
     tdGender.className = "col-gender";
-    tdGender.textContent = p.sexo;
+    const genderSelect = document.createElement("select");
+    genderSelect.className = "person-gender-select";
+    genderSelect.setAttribute("aria-label", `Sexo de ${p.nome}`);
+    ["M", "F"].forEach(gender => {
+      const opt = document.createElement("option");
+      opt.value = gender;
+      opt.textContent = gender;
+      genderSelect.appendChild(opt);
+    });
+    genderSelect.value = p.sexo;
+    genderSelect.addEventListener("change", () => {
+      p.sexo = genderSelect.value;
+      saveState();
+      populateNameSelects();
+    });
+    tdGender.appendChild(genderSelect);
     tr.appendChild(tdGender);
     
     // Privilege checkboxes

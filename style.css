@@ -1334,6 +1334,31 @@ body {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
+.person-gender-select {
+  width: 48px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #e5e7eb;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.22rem 0.35rem;
+  outline: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.person-gender-select:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.person-gender-select:focus {
+  border-color: var(--color-primary);
+  background: #0f172a;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}
+
 .col-gender {
   text-align: center !important;
   width: 65px;
