@@ -1292,6 +1292,21 @@ body {
   font-weight: 500;
   color: #fff;
   font-size: 0.9rem;
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  min-width: 220px;
+  background: #1e293b;
+  box-shadow: 8px 0 12px -12px rgba(0, 0, 0, 0.8);
+}
+
+.people-table th:first-child {
+  z-index: 7;
+  background: #0f172a;
+}
+
+.people-table tbody tr:hover td:first-child {
+  background: #223047;
 }
 
 .person-name-input {
