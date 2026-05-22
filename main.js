@@ -175,6 +175,10 @@ function getParticipantGender(name) {
   return getParticipantByName(name)?.sexo || "";
 }
 
+function normalizeParticipantName(name) {
+  return (name || "").trim().toLowerCase();
+}
+
 function getLifeTextId(part) {
   return `txt-${part.id}`;
 }
@@ -1136,7 +1140,7 @@ function renderPeopleTable() {
       if (newName === oldName) return;
       
       const nameAlreadyExists = state.participants.some(item => (
-        item.id !== p.id && item.nome.toLowerCase() === newName.toLowerCase()
+        item.id !== p.id && normalizeParticipantName(item.nome) === normalizeParticipantName(newName)
       ));
       
       if (nameAlreadyExists) {
@@ -1299,7 +1303,7 @@ function setupModalAndParticipants() {
     
     if (!name) return;
     
-    if (state.participants.some(p => p.nome.toLowerCase() === name.toLowerCase())) {
+    if (state.participants.some(p => normalizeParticipantName(p.nome) === normalizeParticipantName(name))) {
       alert("Este participante já está cadastrado.");
       return;
     }
@@ -1468,7 +1472,12 @@ function fillEmptyParticipantSelects() {
   const weekData = getCurrentWeekData();
   let filledCount = 0;
   const usedParticipants = new Set(
-    Object.values(weekData.selections || {}).filter(Boolean)
+    [
+      ...Object.values(weekData.selections || {}),
+      ...[...document.querySelectorAll(".name-select")].map(select => select.value)
+    ]
+      .filter(Boolean)
+      .map(normalizeParticipantName)
   );
   
   document.querySelectorAll(".name-select").forEach(select => {
@@ -1484,8 +1493,9 @@ function fillEmptyParticipantSelects() {
       : "";
     const blockedGender = blockedValue ? getParticipantGender(blockedValue) : "";
     const firstRealOption = [...select.options].find(option => {
-      if (!option.value || option.value === blockedValue) return false;
-      if (usedParticipants.has(option.value)) return false;
+      const optionKey = normalizeParticipantName(option.value);
+      if (!option.value || optionKey === normalizeParticipantName(blockedValue)) return false;
+      if (usedParticipants.has(optionKey)) return false;
       if (blockedGender && getParticipantGender(option.value) !== blockedGender) return false;
       return true;
     });
@@ -1493,7 +1503,7 @@ function fillEmptyParticipantSelects() {
     
     select.value = firstRealOption.value;
     weekData.selections[select.id] = firstRealOption.value;
-    usedParticipants.add(firstRealOption.value);
+    usedParticipants.add(normalizeParticipantName(firstRealOption.value));
     select.classList.remove("unassigned");
     filledCount += 1;
   });
