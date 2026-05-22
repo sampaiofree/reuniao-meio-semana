@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programação da Reunião do Meio de Semana</title>
+  <!-- Google Fonts for premium typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <!-- Style Sheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Config Panel (Hidden during printing) -->
+    <aside class="control-panel">
+      <div class="panel-header">
+        <h2>Painel de Controle</h2>
+        <p>Configure e personalize a programação abaixo.</p>
+      </div>
+
+      <div class="panel-section">
+        <h3>Participantes</h3>
+        <p class="section-desc">Gerencie os nomes, gêneros e privilégios dos oradores e estudantes.</p>
+        <button id="btn-manage-people" class="btn btn-secondary">
+          <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          Gerenciar Pessoas
+        </button>
+        <div class="people-count-badge">
+          <span id="people-count-num">0</span> pessoas cadastradas
+        </div>
+      </div>
+
+      <div class="panel-section actions-section">
+        <button id="btn-print" class="btn btn-primary">
+          <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Baixar Imagem
+        </button>
+        <button id="btn-reset" class="btn btn-secondary" style="display: none;">
+          <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" >
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+          </svg>
+          Resetar Programação
+        </button>
+      </div>
+      
+      <div class="panel-footer">
+        <p>Desenvolvido para Meaípe</p>
+      </div>
+    </aside>
+
+    <!-- Main Schedule WYSIWYG View -->
+    <main class="editor-area">
+      <div class="schedule-sheet" id="schedule-sheet">
+        
+        <!-- Header -->
+        <header class="sheet-header">
+          <div class="header-main-row">
+            <span class="editable header-loc" contenteditable="true" id="txt-location">Meaípe</span>
+            <span class="editable header-title" contenteditable="true" id="txt-title">Programação da reunião do meio de semana</span>
+          </div>
+          <div class="double-line"></div>
+        </header>
+
+        <!-- Week Subtitle and Main Roles -->
+        <section class="sheet-sub-header">
+          <div class="sub-header-left">
+            <!-- Custom Week Selector -->
+            <div class="week-selector-container">
+              <div class="custom-select" id="week-select">
+                <button class="select-trigger" id="week-select-trigger">
+                  <span id="selected-week-text">18-24 DE MAIO</span>
+                </button>
+                <div class="select-dropdown hidden" id="week-select-dropdown">
+                  <div class="options-wrapper" id="week-options-container">
+                    <!-- Dynamic date options go here -->
+                  </div>
+                  <div class="dropdown-footer">
+                    <button type="button" class="btn-load-more" id="btn-load-more-weeks">
+                      <svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      Carregar mais 5 semanas
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <span class="separator">|</span>
+              <span class="editable week-theme" contenteditable="true" id="txt-week-theme">LEITURA SEMANAL DA BÍBLIA</span>
+            </div>
+          </div>
+          
+          <div class="sub-header-right">
+            <div class="role-row">
+              <span class="role-label">Presidente:</span>
+              <select class="name-select" id="sel-president" data-role="Presidente" data-filter="presidente"></select>
+            </div>
+            <div class="role-row">
+              <span class="role-label">Oração:</span>
+              <select class="name-select" id="sel-prayer-1" data-role="Oração" data-filter="oracao"></select>
+            </div>
+          </div>
+        </section>
+
+        <!-- Initial Songs and Comments -->
+        <section class="sheet-section pre-section">
+          <div class="item-row bullet-item">
+            <span class="bullet">&bull;</span>
+            <div class="item-content">
+              <span class="editable inline-desc" contenteditable="true" id="txt-song-intro">Cântico 21</span>
+            </div>
+          </div>
+          <div class="item-row bullet-item">
+            <span class="bullet">&bull;</span>
+            <div class="item-content">
+              <span class="editable inline-desc" contenteditable="true" id="txt-comments-intro">Comentários iniciais</span>
+              <span class="time-label">(<select class="time-select" id="sel-time-comments-intro"></select> min)</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 1: TESOUROS DA PALAVRA DE DEUS -->
+        <section class="sheet-section section-treasures">
+          <h2 class="section-title title-treasures">TESOUROS DA PALAVRA DE DEUS</h2>
+          
+          <div class="parts-container">
+            <!-- Part 1 -->
+            <div class="part-row">
+              <div class="part-details">
+                <span class="editable part-title" contenteditable="true" id="txt-treasure-p1">1. Tesouros</span>
+                <span class="time-label">(<select class="time-select" id="sel-time-treasure-p1"></select> min)</span>
+              </div>
+              <div class="part-assignee">
+                <select class="name-select" id="sel-treasure-p1" data-role="Orador" data-filter="tesouros"></select>
+              </div>
+            </div>
+            
+            <!-- Part 2 -->
+            <div class="part-row">
+              <div class="part-details">
+                <span class="editable part-title" contenteditable="true" id="txt-treasure-p2">2. Joias espirituais</span>
+                <span class="time-label">(<select class="time-select" id="sel-time-treasure-p2"></select> min)</span>
+              </div>
+              <div class="part-assignee">
+                <select class="name-select" id="sel-treasure-p2" data-role="Orador" data-filter="joias"></select>
+              </div>
+            </div>
+            
+            <!-- Part 3 -->
+            <div class="part-row">
+              <div class="part-details">
+                <span class="editable part-title" contenteditable="true" id="txt-treasure-p3">3. Leitura da Bíblia</span>
+                <span class="time-label">(<select class="time-select" id="sel-time-treasure-p3"></select> min)</span>
+              </div>
+              <div class="part-assignee">
+                <select class="name-select" id="sel-treasure-p3" data-role="Leitor" data-filter="leitura_biblia"></select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 2: FAÇA SEU MELHOR NO MINISTÉRIO -->
+        <section class="sheet-section section-ministry">
+          <h2 class="section-title title-ministry">FAÇA SEU MELHOR NO MINISTÉRIO</h2>
+          
+          <div class="parts-container" id="ministry-parts-container">
+            <!-- Dynamically generated ministry parts -->
+          </div>
+          <button type="button" class="btn-add-part print-hidden" id="btn-add-ministry-part">+ Adicionar parte</button>
+        </section>
+
+        <!-- SECTION 3: NOSSA VIDA CRISTÃ -->
+        <section class="sheet-section section-life">
+          <h2 class="section-title title-life">NOSSA VIDA CRISTÃ</h2>
+          
+          <div class="parts-container">
+            <!-- Bullet Song -->
+            <div class="item-row bullet-item no-border">
+              <span class="bullet">&bull;</span>
+              <div class="item-content">
+                <span class="editable inline-desc" contenteditable="true" id="txt-song-middle">Cântico 100</span>
+              </div>
+            </div>
+
+            <div id="life-parts-container">
+              <!-- Dynamically generated Christian life parts before Bible study -->
+            </div>
+            <button type="button" class="btn-add-part print-hidden" id="btn-add-life-part">+ Adicionar parte</button>
+
+            <!-- Congregation Bible Study -->
+            <div class="part-row dual-labels">
+              <div class="part-details">
+                <span class="editable part-title" contenteditable="true" id="txt-life-p2">Estudo bíblico de congregação</span>
+                <span class="time-label">(<select class="time-select" id="sel-time-life-p2"></select> min)</span>
+              </div>
+              <div class="part-assignee-labeled">
+                <div class="labeled-select">
+                  <span class="select-label">Dirigente:</span>
+                  <select class="name-select" id="sel-life-conductor" data-role="Dirigente" data-filter="estudo_biblico"></select>
+                </div>
+                <div class="labeled-select">
+                  <span class="select-label">Leitor:</span>
+                  <select class="name-select" id="sel-life-reader" data-role="Leitor" data-filter="leitura_estudo_biblico"></select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Concluding comments -->
+            <div class="item-row bullet-item no-border">
+              <span class="bullet">&bull;</span>
+              <div class="item-content">
+                <span class="editable inline-desc" contenteditable="true" id="txt-comments-outro">Comentários finais</span>
+                <span class="time-label">(<select class="time-select" id="sel-time-comments-outro"></select> min)</span>
+              </div>
+            </div>
+
+            <!-- Final song and prayer -->
+            <div class="part-row borderless-row">
+              <div class="item-row bullet-item no-border inline-bullet">
+                <span class="bullet">&bull;</span>
+                <div class="item-content">
+                  <span class="editable inline-desc" contenteditable="true" id="txt-song-outro">Cântico 42</span>
+                </div>
+              </div>
+              <div class="part-assignee-labeled inline-labeled">
+                <div class="labeled-select">
+                  <span class="select-label">Oração:</span>
+                  <select class="name-select" id="sel-prayer-2" data-role="Oração" data-filter="oracao"></select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal for Managing Participants (Hidden during printing) -->
+  <div id="modal-manage-people" class="modal-overlay hidden">
+    <div class="modal-container">
+      <header class="modal-header">
+        <h2>👥 Gerenciamento de Participantes</h2>
+        <button id="btn-close-modal" class="btn-close-icon">&times;</button>
+      </header>
+      
+      <div class="modal-body">
+        <!-- Add Person Form -->
+        <div class="modal-action-bar">
+          <form id="form-add-person" class="add-person-form">
+            <input type="text" id="input-person-name" placeholder="Nome Completo" required autocomplete="off">
+            <select id="select-person-gender">
+              <option value="M">Masculino</option>
+              <option value="F">Feminino</option>
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Adicionar
+            </button>
+          </form>
+        </div>
+        
+        <!-- Table container -->
+        <div class="table-scroll-wrapper">
+          <table class="people-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th class="col-gender">Sexo</th>
+                <th class="col-privilege" title="Presidente">Pres.</th>
+                <th class="col-privilege" title="Oração">Ora.</th>
+                <th class="col-privilege" title="Tesouros (Palestra)">Tes.</th>
+                <th class="col-privilege" title="Joias Espirituais">Joi.</th>
+                <th class="col-privilege" title="Leitura da Bíblia">Lei. B.</th>
+                <th class="col-privilege" title="Dirigente do Estudo Bíblico">Est. B.</th>
+                <th class="col-privilege" title="Leitor do Estudo Bíblico">Lei. E.</th>
+                <th class="col-privilege" title="Ministério - Discurso">M. Dis.</th>
+                <th class="col-privilege" title="Ministério - Publicador">M. Pub.</th>
+                <th class="col-privilege" title="Ministério - Ajudante">M. Aju.</th>
+                <th class="col-privilege" title="Nossa Vida Cristã">V. Cri.</th>
+                <th class="col-actions">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="people-table-body">
+              <!-- Dynamically generated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <footer class="modal-footer">
+        <button id="btn-close-modal-footer" class="btn btn-secondary">Fechar</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="login-overlay" class="login-overlay" aria-modal="true" role="dialog">
+    <form id="login-form" class="login-card">
+      <div class="login-kicker">Acesso restrito</div>
+      <h1>Programação da reunião</h1>
+      <p>Digite a senha para visualizar e editar a programação.</p>
+      <label class="login-label" for="login-password">Senha</label>
+      <input id="login-password" type="password" inputmode="numeric" autocomplete="current-password" required>
+      <p id="login-error" class="login-error" aria-live="polite"></p>
+      <button type="submit" class="btn btn-primary login-button">Entrar</button>
+    </form>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="main.js"></script>
+</body>
+</html>
