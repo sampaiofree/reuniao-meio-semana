@@ -1111,7 +1111,9 @@ function renderPeopleTable() {
   const tbody = document.getElementById("people-table-body");
   tbody.innerHTML = "";
   
-  state.participants.forEach(p => {
+  [...state.participants]
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }))
+    .forEach(p => {
     const tr = document.createElement("tr");
     
     // Name
