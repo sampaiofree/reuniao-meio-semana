@@ -167,6 +167,14 @@ function getMinistryPairDismissKey(partId, student, assistant) {
   return `${state.week}::${partId}::${getMinistryPairKey(student, assistant)}`;
 }
 
+function getParticipantByName(name) {
+  return state.participants.find(participant => participant.nome === name);
+}
+
+function getParticipantGender(name) {
+  return getParticipantByName(name)?.sexo || "";
+}
+
 function getLifeTextId(part) {
   return `txt-${part.id}`;
 }
@@ -352,6 +360,29 @@ function getParticipantAssignmentsInWeek(participantName, weekData) {
     .map(([selectId]) => getAssignmentLabel(selectId, weekData))
     .filter(Boolean)
     .filter((label, index, labels) => labels.indexOf(label) === index);
+}
+
+function enforceCurrentWeekMinistryPairRules() {
+  const weekData = getCurrentWeekData();
+  let changed = false;
+  
+  weekData.ministryParts.forEach(part => {
+    if (part.type === "Discurso") return;
+    
+    const studentId = getMinistryStudentId(part);
+    const assistantId = getMinistryAssistantId(part);
+    const student = weekData.selections[studentId];
+    const assistant = weekData.selections[assistantId];
+    
+    if (!student || !assistant) return;
+    
+    if (student === assistant || getParticipantGender(student) !== getParticipantGender(assistant)) {
+      weekData.selections[assistantId] = "";
+      changed = true;
+    }
+  });
+  
+  return changed;
 }
 
 function getLastAssignmentSummary(participantName) {
@@ -829,6 +860,7 @@ function loadWeekDataIntoUI(weekIso) {
 function populateNameSelects() {
   const selects = document.querySelectorAll(".name-select");
   const weekData = getCurrentWeekData();
+  const selectionChanged = enforceCurrentWeekMinistryPairRules();
   
   selects.forEach(select => {
     const id = select.id;
@@ -855,7 +887,20 @@ function populateNameSelects() {
       }))
       .filter(item => {
         if (!filterKey) return true; // fallback
-        return item.participant[filterKey] === true;
+        if (item.participant[filterKey] !== true) return false;
+        
+        const ministryPart = getMinistryPartBySelectId(id, weekData);
+        if (ministryPart && ministryPart.type !== "Discurso") {
+          const pairedName = id === getMinistryStudentId(ministryPart)
+            ? weekData.selections[getMinistryAssistantId(ministryPart)]
+            : weekData.selections[getMinistryStudentId(ministryPart)];
+          
+          if (pairedName && item.participant.sexo !== getParticipantGender(pairedName)) {
+            return false;
+          }
+        }
+        
+        return true;
       })
       .sort((a, b) => {
         if (!a.lastAssignment && !b.lastAssignment) return a.index - b.index;
@@ -894,6 +939,10 @@ function populateNameSelects() {
 
     collapseParticipantSelectLabel(select);
   });
+  
+  if (selectionChanged) {
+    saveState();
+  }
 }
 
 /**
@@ -1005,8 +1054,12 @@ function setupSelectListeners() {
         const studentId = getMinistryStudentId(ministryPart);
         const assistantId = getMinistryAssistantId(ministryPart);
         const pairedSelectId = id === studentId ? assistantId : studentId;
+        const pairedName = weekData.selections[pairedSelectId];
         
-        if (weekData.selections[pairedSelectId] === val) {
+        if (
+          pairedName === val ||
+          (pairedName && getParticipantGender(pairedName) !== getParticipantGender(val))
+        ) {
           weekData.selections[pairedSelectId] = "";
           const pairedSelect = document.getElementById(pairedSelectId);
           if (pairedSelect) {
@@ -1409,7 +1462,12 @@ function fillEmptyParticipantSelects() {
             : weekData.selections[getMinistryStudentId(ministryPart)]
         )
       : "";
-    const firstRealOption = [...select.options].find(option => option.value && option.value !== blockedValue);
+    const blockedGender = blockedValue ? getParticipantGender(blockedValue) : "";
+    const firstRealOption = [...select.options].find(option => {
+      if (!option.value || option.value === blockedValue) return false;
+      if (blockedGender && getParticipantGender(option.value) !== blockedGender) return false;
+      return true;
+    });
     if (!firstRealOption) return;
     
     select.value = firstRealOption.value;
