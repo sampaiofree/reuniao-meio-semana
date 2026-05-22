@@ -284,6 +284,10 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
+.schedule-sheet .name-select {
+  font-size: 0.82rem;
+}
+
 /* Special placeholder style for empty names */
 .name-select:invalid,
 .name-select.unassigned {
@@ -693,6 +697,41 @@ body {
   cursor: default;
 }
 
+.pair-warning-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.15rem 0 0.3rem 2rem;
+  padding: 0.32rem 0.45rem 0.32rem 0.65rem;
+  border: 1px solid rgba(176, 124, 11, 0.32);
+  border-radius: 999px;
+  background: rgba(176, 124, 11, 0.1);
+  color: #7c4d00;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.btn-dismiss-pair-warning {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(176, 124, 11, 0.18);
+  color: #7c4d00;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-dismiss-pair-warning:hover {
+  background: rgba(176, 124, 11, 0.28);
+}
+
 /* -------------------------------------------------------------
    CUSTOM DRIP-DOWN WEEK SELECTOR
    ------------------------------------------------------------- */
@@ -890,6 +929,9 @@ body {
     width: 100%;
   }
   .btn-add-part {
+    margin-left: 0.5rem;
+  }
+  .pair-warning-pill {
     margin-left: 0.5rem;
   }
   .labeled-select {
@@ -1250,6 +1292,31 @@ body {
   font-weight: 500;
   color: #fff;
   font-size: 0.9rem;
+}
+
+.person-name-input {
+  width: 100%;
+  min-width: 180px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  padding: 0.25rem 0.35rem;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.person-name-input:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.person-name-input:focus {
+  border-color: var(--color-primary);
+  background: #0f172a;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
 .col-gender {

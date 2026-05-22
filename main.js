@@ -58,6 +58,7 @@ let state = {
 let generatedWeeks = [];
 let serverPersistenceAvailable = false;
 let saveStateTimeout = null;
+const dismissedPairWarnings = new Set();
 
 /* -------------------------------------------------------------
    DEFAULT DATA TEMPLATE GENERATOR
@@ -148,6 +149,22 @@ function getMinistryAssistantId(part) {
 
 function getMinistrySpeakerId(part) {
   return `sel-${part.id}-speaker`;
+}
+
+function getMinistryPartBySelectId(selectId, weekData = getCurrentWeekData()) {
+  return weekData.ministryParts.find(part => (
+    selectId === getMinistryStudentId(part) ||
+    selectId === getMinistryAssistantId(part) ||
+    selectId === getMinistrySpeakerId(part)
+  ));
+}
+
+function getMinistryPairKey(student, assistant) {
+  return [student, assistant].sort((a, b) => a.localeCompare(b)).join("||");
+}
+
+function getMinistryPairDismissKey(partId, student, assistant) {
+  return `${state.week}::${partId}::${getMinistryPairKey(student, assistant)}`;
 }
 
 function getLifeTextId(part) {
@@ -360,6 +377,64 @@ function getLastAssignmentSummary(participantName) {
 function formatParticipantOptionText(participantName, summary) {
   if (!summary) return participantName;
   return `${participantName} — ${summary.relativeText}, ${summary.labels.join(" / ")}`;
+}
+
+function expandParticipantSelectOptions(select) {
+  [...select.options].forEach(option => {
+    if (option.dataset.fullText) {
+      option.textContent = option.dataset.fullText;
+    }
+  });
+}
+
+function collapseParticipantSelectLabel(select) {
+  const selectedOption = select.options[select.selectedIndex];
+  if (selectedOption?.dataset.shortText) {
+    selectedOption.textContent = selectedOption.dataset.shortText;
+  }
+}
+
+function findPreviousMinistryPair(student, assistant) {
+  if (!student || !assistant || student === assistant) return null;
+  
+  const targetPairKey = getMinistryPairKey(student, assistant);
+  const previousWeeks = Object.entries(state.weeksData)
+    .filter(([weekIso]) => weekIso < state.week)
+    .sort(([weekA], [weekB]) => weekB.localeCompare(weekA));
+  
+  for (const [weekIso, weekData] of previousWeeks) {
+    ensureWeekDataShape(weekData);
+    
+    const repeatedPart = weekData.ministryParts.find(part => {
+      if (part.type === "Discurso") return false;
+      
+      const previousStudent = weekData.selections[getMinistryStudentId(part)];
+      const previousAssistant = weekData.selections[getMinistryAssistantId(part)];
+      if (!previousStudent || !previousAssistant) return false;
+      
+      return getMinistryPairKey(previousStudent, previousAssistant) === targetPairKey;
+    });
+    
+    if (repeatedPart) {
+      return {
+        weekIso,
+        weekText: formatWeekRangeFromIso(weekIso),
+        partType: repeatedPart.type
+      };
+    }
+  }
+  
+  return null;
+}
+
+function updateParticipantNameEverywhere(oldName, newName) {
+  Object.values(state.weeksData).forEach(weekData => {
+    Object.keys(weekData.selections || {}).forEach(selectId => {
+      if (weekData.selections[selectId] === oldName) {
+        weekData.selections[selectId] = newName;
+      }
+    });
+  });
 }
 
 /* -------------------------------------------------------------
@@ -637,6 +712,24 @@ function renderMinistryParts() {
     
     row.appendChild(createRemovePartButton("ministry", part.id, weekData.ministryParts.length > 1));
     container.appendChild(row);
+    
+    if (part.type !== "Discurso") {
+      const student = weekData.selections[getMinistryStudentId(part)];
+      const assistant = weekData.selections[getMinistryAssistantId(part)];
+      const previousPair = findPreviousMinistryPair(student, assistant);
+      const dismissKey = student && assistant ? getMinistryPairDismissKey(part.id, student, assistant) : "";
+      
+      if (previousPair && !dismissedPairWarnings.has(dismissKey)) {
+        const warning = document.createElement("div");
+        warning.className = "pair-warning-pill print-hidden";
+        warning.setAttribute("data-dismiss-key", dismissKey);
+        warning.innerHTML = `
+          <span>Dupla já fez parte junta em ${previousPair.weekText}</span>
+          <button type="button" class="btn-dismiss-pair-warning" aria-label="Remover aviso">&times;</button>
+        `;
+        container.appendChild(warning);
+      }
+    }
   });
 }
 
@@ -761,7 +854,6 @@ function populateNameSelects() {
         lastAssignment: getLastAssignmentSummary(participant.nome)
       }))
       .filter(item => {
-        if (item.participant.nome === currentVal) return true; // keep currently selected
         if (!filterKey) return true; // fallback
         return item.participant[filterKey] === true;
       })
@@ -778,21 +870,29 @@ function populateNameSelects() {
     eligibleParticipants.forEach(({ participant, lastAssignment }) => {
       const opt = document.createElement("option");
       opt.value = participant.nome;
-      opt.textContent = formatParticipantOptionText(participant.nome, lastAssignment);
+      opt.dataset.shortText = participant.nome;
+      opt.dataset.fullText = formatParticipantOptionText(participant.nome, lastAssignment);
+      opt.textContent = opt.dataset.fullText;
       if (lastAssignment) {
         opt.title = `${lastAssignment.weekText}: ${lastAssignment.labels.join(" / ")}`;
       }
       select.appendChild(opt);
     });
     
-    // Restore value
+    // Restore value only if the saved participant is still eligible for this role.
     select.value = currentVal;
+    if (currentVal && select.value !== currentVal) {
+      weekData.selections[id] = "";
+      select.value = "";
+    }
     
     if (!currentVal) {
       select.classList.add("unassigned");
     } else {
       select.classList.remove("unassigned");
     }
+
+    collapseParticipantSelectLabel(select);
   });
 }
 
@@ -869,6 +969,27 @@ function setupInlineEditableFields() {
  * Setup listeners for select changes
  */
 function setupSelectListeners() {
+  document.addEventListener("pointerdown", (e) => {
+    if (e.target.classList?.contains("name-select")) {
+      expandParticipantSelectOptions(e.target);
+    }
+  });
+
+  document.addEventListener("focusout", (e) => {
+    if (e.target.classList?.contains("name-select")) {
+      collapseParticipantSelectLabel(e.target);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (
+      e.target.classList?.contains("name-select") &&
+      ["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)
+    ) {
+      expandParticipantSelectOptions(e.target);
+    }
+  });
+
   document.addEventListener("change", (e) => {
     const select = e.target;
     const weekData = getCurrentWeekData();
@@ -876,13 +997,36 @@ function setupSelectListeners() {
     if (select.classList.contains("name-select")) {
       const id = select.id;
       const val = select.value;
+      const ministryPart = getMinistryPartBySelectId(id, weekData);
       
       weekData.selections[id] = val;
+      
+      if (ministryPart && ministryPart.type !== "Discurso" && val) {
+        const studentId = getMinistryStudentId(ministryPart);
+        const assistantId = getMinistryAssistantId(ministryPart);
+        const pairedSelectId = id === studentId ? assistantId : studentId;
+        
+        if (weekData.selections[pairedSelectId] === val) {
+          weekData.selections[pairedSelectId] = "";
+          const pairedSelect = document.getElementById(pairedSelectId);
+          if (pairedSelect) {
+            pairedSelect.value = "";
+            pairedSelect.classList.add("unassigned");
+          }
+        }
+      }
       
       if (!val) {
         select.classList.add("unassigned");
       } else {
         select.classList.remove("unassigned");
+      }
+
+      collapseParticipantSelectLabel(select);
+      
+      if (ministryPart && ministryPart.type !== "Discurso") {
+        renderMinistryParts();
+        populateNameSelects();
       }
       
       saveState();
@@ -919,7 +1063,54 @@ function renderPeopleTable() {
     
     // Name
     const tdName = document.createElement("td");
-    tdName.textContent = p.nome;
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "person-name-input";
+    nameInput.value = p.nome;
+    nameInput.setAttribute("aria-label", `Nome de ${p.nome}`);
+    
+    const commitNameChange = () => {
+      const oldName = p.nome;
+      const newName = nameInput.value.trim();
+      
+      if (!newName) {
+        nameInput.value = oldName;
+        return;
+      }
+      
+      if (newName === oldName) return;
+      
+      const nameAlreadyExists = state.participants.some(item => (
+        item.id !== p.id && item.nome.toLowerCase() === newName.toLowerCase()
+      ));
+      
+      if (nameAlreadyExists) {
+        alert("Este participante já está cadastrado.");
+        nameInput.value = oldName;
+        return;
+      }
+      
+      p.nome = newName;
+      updateParticipantNameEverywhere(oldName, newName);
+      nameInput.setAttribute("aria-label", `Nome de ${newName}`);
+      saveState();
+      populateNameSelects();
+    };
+    
+    nameInput.addEventListener("blur", commitNameChange);
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        nameInput.blur();
+      }
+      
+      if (e.key === "Escape") {
+        nameInput.value = p.nome;
+        nameInput.blur();
+      }
+    });
+    
+    tdName.appendChild(nameInput);
     tr.appendChild(tdName);
     
     // Gender
@@ -1114,6 +1305,16 @@ function setupDynamicPartControls() {
   });
   
   scheduleSheet.addEventListener("click", (e) => {
+    const dismissWarningButton = e.target.closest(".btn-dismiss-pair-warning");
+    if (dismissWarningButton) {
+      const warning = dismissWarningButton.closest(".pair-warning-pill");
+      if (warning) {
+        dismissedPairWarnings.add(warning.getAttribute("data-dismiss-key"));
+        warning.remove();
+      }
+      return;
+    }
+    
     const button = e.target.closest(".btn-remove-part");
     if (!button || button.disabled) return;
     
@@ -1191,12 +1392,50 @@ function setupCustomWeekSelector() {
   });
 }
 
+function fillEmptyParticipantSelects() {
+  pullUIValuesIntoState();
+  
+  const weekData = getCurrentWeekData();
+  let filledCount = 0;
+  
+  document.querySelectorAll(".name-select").forEach(select => {
+    if (select.value) return;
+    
+    const ministryPart = getMinistryPartBySelectId(select.id, weekData);
+    const blockedValue = ministryPart && ministryPart.type !== "Discurso"
+      ? (
+          select.id === getMinistryStudentId(ministryPart)
+            ? weekData.selections[getMinistryAssistantId(ministryPart)]
+            : weekData.selections[getMinistryStudentId(ministryPart)]
+        )
+      : "";
+    const firstRealOption = [...select.options].find(option => option.value && option.value !== blockedValue);
+    if (!firstRealOption) return;
+    
+    select.value = firstRealOption.value;
+    weekData.selections[select.id] = firstRealOption.value;
+    select.classList.remove("unassigned");
+    filledCount += 1;
+  });
+  
+  if (filledCount > 0) {
+    renderMinistryParts();
+    populateNameSelects();
+    saveState();
+  }
+}
+
 /**
  * Print & Reset Operations
  */
 function setupPanelActions() {
+  const btnFillParticipants = document.getElementById("btn-fill-participants");
   const btnPrint = document.getElementById("btn-print");
   const btnReset = document.getElementById("btn-reset");
+  
+  btnFillParticipants.addEventListener("click", () => {
+    fillEmptyParticipantSelects();
+  });
   
   btnPrint.addEventListener("click", async () => {
     pullUIValuesIntoState(); // Pull any final unblurred inputs before printing
