@@ -1467,6 +1467,9 @@ function fillEmptyParticipantSelects() {
   
   const weekData = getCurrentWeekData();
   let filledCount = 0;
+  const usedParticipants = new Set(
+    Object.values(weekData.selections || {}).filter(Boolean)
+  );
   
   document.querySelectorAll(".name-select").forEach(select => {
     if (select.value) return;
@@ -1482,6 +1485,7 @@ function fillEmptyParticipantSelects() {
     const blockedGender = blockedValue ? getParticipantGender(blockedValue) : "";
     const firstRealOption = [...select.options].find(option => {
       if (!option.value || option.value === blockedValue) return false;
+      if (usedParticipants.has(option.value)) return false;
       if (blockedGender && getParticipantGender(option.value) !== blockedGender) return false;
       return true;
     });
@@ -1489,6 +1493,7 @@ function fillEmptyParticipantSelects() {
     
     select.value = firstRealOption.value;
     weekData.selections[select.id] = firstRealOption.value;
+    usedParticipants.add(firstRealOption.value);
     select.classList.remove("unassigned");
     filledCount += 1;
   });
