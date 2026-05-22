@@ -1293,17 +1293,17 @@ function setupModalAndParticipants() {
       id: Date.now().toString(),
       nome: name,
       sexo: gender,
-      presidente: true,
-      oracao: true,
-      tesouros: true,
-      joias: true,
-      leitura_biblia: true,
-      leitura_estudo_biblico: true,
-      estudo_biblico: true,
-      miniterio_discurso: true,
-      miniterio_publicador: true,
-      miniterio_ajudante: true,
-      vida_crista: true
+      presidente: false,
+      oracao: false,
+      tesouros: false,
+      joias: false,
+      leitura_biblia: false,
+      leitura_estudo_biblico: false,
+      estudo_biblico: false,
+      miniterio_discurso: false,
+      miniterio_publicador: false,
+      miniterio_ajudante: false,
+      vida_crista: false
     };
     
     state.participants.push(newParticipant);
