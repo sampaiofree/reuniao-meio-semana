@@ -1518,6 +1518,58 @@ function fillEmptyParticipantSelects() {
 /**
  * Print & Reset Operations
  */
+function replaceSelectsWithExportText(clonedSheet, selector, className, getText) {
+  clonedSheet.querySelectorAll(selector).forEach(select => {
+    const text = getText(select);
+    const replacement = clonedSheet.ownerDocument.createElement("span");
+    replacement.className = `export-select-text ${className}`;
+    replacement.textContent = text;
+
+    if (!text) {
+      replacement.classList.add("is-empty");
+    }
+
+    select.replaceWith(replacement);
+  });
+}
+
+function prepareSheetCloneForImageExport(clonedDocument) {
+  const clonedSheet = clonedDocument.getElementById("schedule-sheet");
+  if (!clonedSheet) return;
+
+  replaceSelectsWithExportText(
+    clonedSheet,
+    ".name-select",
+    "export-name-text",
+    select => select.value.trim()
+  );
+
+  replaceSelectsWithExportText(
+    clonedSheet,
+    ".time-select",
+    "export-time-text",
+    select => (select.options[select.selectedIndex]?.textContent || select.value).trim()
+  );
+
+  replaceSelectsWithExportText(
+    clonedSheet,
+    ".ministry-type-select",
+    "export-ministry-type-text",
+    select => (select.options[select.selectedIndex]?.textContent || select.value).trim()
+  );
+
+  clonedSheet.querySelectorAll(".part-assignee-pair").forEach(pair => {
+    const filledNames = [...pair.querySelectorAll(".export-name-text")]
+      .filter(name => name.textContent.trim());
+
+    if (filledNames.length < 2) {
+      pair.querySelectorAll(".slash").forEach(slash => {
+        slash.style.display = "none";
+      });
+    }
+  });
+}
+
 function setupPanelActions() {
   const btnFillParticipants = document.getElementById("btn-fill-participants");
   const btnPrint = document.getElementById("btn-print");
@@ -1545,7 +1597,8 @@ function setupPanelActions() {
       const canvas = await html2canvas(sheet, {
         backgroundColor: "#ffffff",
         scale: Math.max(2, window.devicePixelRatio || 1),
-        useCORS: true
+        useCORS: true,
+        onclone: prepareSheetCloneForImageExport
       });
       
       const link = document.createElement("a");

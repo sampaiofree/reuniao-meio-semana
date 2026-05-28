@@ -368,6 +368,48 @@ body {
   border-bottom: 1px solid var(--color-primary);
 }
 
+/* Static text used only in the cloned sheet rendered by html2canvas */
+.export-select-text {
+  display: inline-block;
+  max-width: 100%;
+  color: #000000;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.export-name-text {
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.export-select-text.is-empty {
+  display: none;
+}
+
+.role-row .export-name-text,
+.part-assignee .export-name-text,
+.labeled-select .export-name-text {
+  width: 100%;
+}
+
+.part-assignee-pair .export-name-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.export-time-text {
+  font-size: 0.95rem;
+  font-weight: normal;
+}
+
+.export-ministry-type-text {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 0 4px;
+}
+
 /* -------------------------------------------------------------
    SHEET SECTIONS
    ------------------------------------------------------------- */
