@@ -1518,6 +1518,12 @@ function fillEmptyParticipantSelects() {
 /**
  * Print & Reset Operations
  */
+const A4_EXPORT_WIDTH_PX = 2480;
+const A4_EXPORT_HEIGHT_PX = 3508;
+const A4_EXPORT_SCALE = 2;
+const A4_EXPORT_CSS_WIDTH = A4_EXPORT_WIDTH_PX / A4_EXPORT_SCALE;
+const A4_EXPORT_CSS_HEIGHT = A4_EXPORT_HEIGHT_PX / A4_EXPORT_SCALE;
+
 function replaceSelectsWithExportText(clonedSheet, selector, className, getText) {
   clonedSheet.querySelectorAll(selector).forEach(select => {
     const text = getText(select);
@@ -1536,6 +1542,12 @@ function replaceSelectsWithExportText(clonedSheet, selector, className, getText)
 function prepareSheetCloneForImageExport(clonedDocument) {
   const clonedSheet = clonedDocument.getElementById("schedule-sheet");
   if (!clonedSheet) return;
+
+  clonedSheet.classList.add("image-export-sheet");
+  clonedSheet.style.width = `${A4_EXPORT_CSS_WIDTH}px`;
+  clonedSheet.style.maxWidth = `${A4_EXPORT_CSS_WIDTH}px`;
+  clonedSheet.style.height = `${A4_EXPORT_CSS_HEIGHT}px`;
+  clonedSheet.style.minHeight = `${A4_EXPORT_CSS_HEIGHT}px`;
 
   replaceSelectsWithExportText(
     clonedSheet,
@@ -1596,7 +1608,11 @@ function setupPanelActions() {
     try {
       const canvas = await html2canvas(sheet, {
         backgroundColor: "#ffffff",
-        scale: Math.max(2, window.devicePixelRatio || 1),
+        scale: A4_EXPORT_SCALE,
+        width: A4_EXPORT_CSS_WIDTH,
+        height: A4_EXPORT_CSS_HEIGHT,
+        windowWidth: A4_EXPORT_CSS_WIDTH,
+        windowHeight: A4_EXPORT_CSS_HEIGHT,
         useCORS: true,
         onclone: prepareSheetCloneForImageExport
       });

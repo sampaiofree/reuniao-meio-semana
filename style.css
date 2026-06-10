@@ -228,6 +228,13 @@ body {
   gap: 1.25rem;
 }
 
+.image-export-sheet {
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  background: #ffffff !important;
+}
+
 /* Editable Elements Indication */
 .editable {
   outline: none;
