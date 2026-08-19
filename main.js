@@ -1545,9 +1545,18 @@ function prepareSheetCloneForImageExport(clonedDocument) {
 
   clonedSheet.classList.add("image-export-sheet");
   clonedSheet.style.width = `${A4_EXPORT_CSS_WIDTH}px`;
+  clonedSheet.style.minWidth = `${A4_EXPORT_CSS_WIDTH}px`;
   clonedSheet.style.maxWidth = `${A4_EXPORT_CSS_WIDTH}px`;
+  clonedSheet.style.flex = `0 0 ${A4_EXPORT_CSS_WIDTH}px`;
   clonedSheet.style.height = `${A4_EXPORT_CSS_HEIGHT}px`;
   clonedSheet.style.minHeight = `${A4_EXPORT_CSS_HEIGHT}px`;
+
+  const renderedWidth = Math.round(clonedSheet.getBoundingClientRect().width);
+  if (renderedWidth !== A4_EXPORT_CSS_WIDTH) {
+    throw new Error(
+      `Unexpected export sheet width: ${renderedWidth}px instead of ${A4_EXPORT_CSS_WIDTH}px.`
+    );
+  }
 
   replaceSelectsWithExportText(
     clonedSheet,
