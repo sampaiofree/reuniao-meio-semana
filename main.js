@@ -1582,6 +1582,30 @@ function prepareSheetCloneForImageExport(clonedDocument) {
   });
 }
 
+function downloadCanvasAsPng(canvas, filename) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) {
+        reject(new Error("Failed to convert the exported canvas to PNG."));
+        return;
+      }
+
+      const imageUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = imageUrl;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      // Keep the object URL alive long enough for mobile browsers to start
+      // consuming the file before releasing it.
+      window.setTimeout(() => URL.revokeObjectURL(imageUrl), 60_000);
+      resolve();
+    }, "image/png");
+  });
+}
+
 function setupPanelActions() {
   const btnFillParticipants = document.getElementById("btn-fill-participants");
   const btnPrint = document.getElementById("btn-print");
@@ -1616,11 +1640,14 @@ function setupPanelActions() {
         useCORS: true,
         onclone: prepareSheetCloneForImageExport
       });
-      
-      const link = document.createElement("a");
-      link.download = `programacao-${state.week}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
+
+      if (canvas.width !== A4_EXPORT_WIDTH_PX || canvas.height !== A4_EXPORT_HEIGHT_PX) {
+        throw new Error(
+          `Unexpected export size: ${canvas.width}x${canvas.height}px.`
+        );
+      }
+
+      await downloadCanvasAsPng(canvas, `programacao-${state.week}.png`);
     } catch (error) {
       console.error("Failed to export schedule image.", error);
       alert("Não foi possível gerar a imagem. Tente novamente.");

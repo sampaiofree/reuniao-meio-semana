@@ -228,11 +228,45 @@ body {
   gap: 1.25rem;
 }
 
-.image-export-sheet {
+.schedule-sheet.image-export-sheet {
   box-shadow: none !important;
   border-radius: 0 !important;
   margin: 0 !important;
   background: #ffffff !important;
+  padding: 3rem 4rem !important;
+  overflow: hidden !important;
+}
+
+/* Keep the desktop paper layout when html2canvas runs from a narrow viewport. */
+.image-export-sheet .sheet-sub-header {
+  grid-template-columns: 1fr auto !important;
+  gap: 2rem !important;
+}
+
+.image-export-sheet .sub-header-right,
+.image-export-sheet .part-assignee,
+.image-export-sheet .part-assignee-pair,
+.image-export-sheet .part-assignee-labeled {
+  min-width: 250px !important;
+  width: 250px !important;
+}
+
+.image-export-sheet .role-row {
+  grid-template-columns: 85px 1fr !important;
+}
+
+.image-export-sheet .part-row {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 0 !important;
+}
+
+.image-export-sheet .labeled-select {
+  grid-template-columns: 110px 1fr !important;
+}
+
+.image-export-sheet .parts-container {
+  padding-left: 2rem !important;
 }
 
 /* Editable Elements Indication */
