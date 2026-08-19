@@ -233,19 +233,11 @@ body {
   border-radius: 0 !important;
   margin: 0 !important;
   background: #ffffff !important;
-  padding: 3rem 0 !important;
+  padding: 3rem 1.5rem !important;
   overflow: hidden !important;
 }
 
 /* Keep the desktop paper layout when html2canvas runs from a narrow viewport. */
-.image-export-sheet .sheet-header,
-.image-export-sheet .sheet-sub-header,
-.image-export-sheet .pre-section,
-.image-export-sheet .parts-container {
-  margin-right: 1.5rem !important;
-  margin-left: 1.5rem !important;
-}
-
 .image-export-sheet .sheet-sub-header {
   grid-template-columns: 1fr auto !important;
   gap: 2rem !important;
