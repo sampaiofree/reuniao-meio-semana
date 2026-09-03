@@ -38,10 +38,7 @@ const MINISTRY_PART_OPTIONS = [
 ];
 
 const DEFAULT_MINISTRY_TIMES = ["3", "4", "5"];
-const LOGIN_PASSWORD = "1914";
-const LOGIN_SESSION_KEY = "midweek_schedule_unlocked";
-const LOCAL_STORAGE_KEY = "midweek_schedule_state";
-const STATE_API_URL = "/api/state";
+const LEGACY_LOCAL_STORAGE_KEY = "midweek_schedule_state";
 
 /* -------------------------------------------------------------
    APPLICATION STATE
@@ -49,15 +46,20 @@ const STATE_API_URL = "/api/state";
 let state = {
   week: BASE_MONDAY_ISO,
   weekText: "18 a 24 de maio",
-  participants: [...DEFAULT_PARTICIPANTS],
+  participants: DEFAULT_PARTICIPANTS.map(participant => ({ ...participant })),
   loadedWeeksCount: 5,
   weeksData: {} // Map containing weekISO -> weekSpecificData
 };
 
 // Internal list of all generated week options
 let generatedWeeks = [];
-let serverPersistenceAvailable = false;
 let saveStateTimeout = null;
+let saveRequestChain = Promise.resolve();
+let lastSaveError = null;
+let currentUser = null;
+let accessibleCongregations = [];
+let activeCongregation = null;
+let editorInitialized = false;
 const dismissedPairWarnings = new Set();
 
 /* -------------------------------------------------------------
@@ -67,7 +69,7 @@ function getDefaultWeekData(weekIso) {
   const isBaseWeek = (weekIso === BASE_MONDAY_ISO);
   
   return {
-    location: "Meaípe",
+    location: activeCongregation?.name || "Meaípe",
     title: "Programação da reunião do meio de semana",
     theme: "LEITURA SEMANAL DA BÍBLIA",
     selections: {
@@ -119,6 +121,29 @@ function getDefaultWeekData(weekIso) {
     lifeParts: [
       { id: "life-p1" }
     ]
+  };
+}
+
+function getCurrentMondayIso() {
+  const now = new Date();
+  const day = now.getDay();
+  const distanceToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + distanceToMonday, 12);
+  return monday.toISOString().split("T")[0];
+}
+
+function createCongregationState({ initial = false } = {}) {
+  const firstWeek = initial ? BASE_MONDAY_ISO : getCurrentMondayIso();
+  const firstWeekText = formatWeekRangeFromIso(firstWeek);
+  return {
+    week: firstWeek,
+    weekText: firstWeekText,
+    startWeek: firstWeek,
+    participants: initial
+      ? DEFAULT_PARTICIPANTS.map(participant => ({ ...participant }))
+      : [],
+    loadedWeeksCount: 5,
+    weeksData: {}
   };
 }
 
@@ -473,40 +498,73 @@ function updateParticipantNameEverywhere(oldName, newName) {
 }
 
 /* -------------------------------------------------------------
-   LOCAL STORAGE PERSISTENCE
+   AUTHENTICATED SERVER PERSISTENCE
    ------------------------------------------------------------- */
-function saveStateToLocalStorage() {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+function showConnectionError(message) {
+  const element = document.getElementById("connection-error");
+  if (!element) return;
+  element.textContent = message;
+  element.classList.remove("hidden");
 }
 
-async function saveStateToServer() {
-  if (!serverPersistenceAvailable) return;
-  
-  try {
-    const response = await fetch(STATE_API_URL, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(state)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to save state: ${response.status}`);
+function clearConnectionError() {
+  document.getElementById("connection-error")?.classList.add("hidden");
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {})
     }
-  } catch (error) {
-    serverPersistenceAvailable = false;
-    console.warn("Server persistence unavailable. Using localStorage fallback.", error);
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || "Não foi possível concluir a operação.");
+    error.status = response.status;
+    throw error;
   }
+  clearConnectionError();
+  return payload;
+}
+
+function queueStateSave(congregationId, stateSnapshot) {
+  saveRequestChain = saveRequestChain.then(async () => {
+    await requestJson(`/api/congregations/${congregationId}/state`, {
+      method: "PUT",
+      body: JSON.stringify(stateSnapshot)
+    });
+    lastSaveError = null;
+  }).catch(error => {
+    lastSaveError = error;
+    console.error("Failed to save congregation state.", error);
+    showConnectionError(error.status === 401
+      ? "Sua sessão expirou. Entre novamente para continuar."
+      : "Não foi possível salvar. Verifique sua conexão antes de sair.");
+    if (error.status === 401) showLogin();
+  });
+  return saveRequestChain;
 }
 
 function saveState() {
-  saveStateToLocalStorage();
-  
+  if (!activeCongregation) return;
+  const congregationId = activeCongregation.id;
   window.clearTimeout(saveStateTimeout);
   saveStateTimeout = window.setTimeout(() => {
-    saveStateToServer();
+    saveStateTimeout = null;
+    queueStateSave(congregationId, structuredClone(state));
   }, 350);
+}
+
+async function flushPendingSave() {
+  if (saveStateTimeout && activeCongregation) {
+    window.clearTimeout(saveStateTimeout);
+    saveStateTimeout = null;
+    queueStateSave(activeCongregation.id, structuredClone(state));
+  }
+  await saveRequestChain;
+  return !lastSaveError;
 }
 
 function mergeLoadedState(loadedState) {
@@ -542,50 +600,21 @@ function mergeLoadedState(loadedState) {
     });
   }
   
-  if (!state.participants) {
-    state.participants = [...DEFAULT_PARTICIPANTS];
-  }
+  if (!Array.isArray(state.participants)) state.participants = [];
+  state.startWeek = state.startWeek || BASE_MONDAY_ISO;
 }
 
-function loadStateFromLocalStorage() {
-  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      mergeLoadedState(parsed);
-    } catch (e) {
-      console.error("Failed to parse stored state, using defaults.", e);
-    }
-  } else {
-    state.participants = [...DEFAULT_PARTICIPANTS];
+async function loadStateFromServer(congregation) {
+  const payload = await requestJson(`/api/congregations/${congregation.id}/state`);
+  activeCongregation = payload.congregation || congregation;
+  state = createCongregationState({ initial: Boolean(congregation.isInitial) });
+  if (payload.state) mergeLoadedState(payload.state);
+  if (!payload.state) {
+    getCurrentWeekData();
+    await queueStateSave(activeCongregation.id, structuredClone(state));
   }
-}
-
-async function loadStateFromServer() {
-  try {
-    const response = await fetch(STATE_API_URL);
-    if (!response.ok) {
-      throw new Error(`Failed to load state: ${response.status}`);
-    }
-    
-    const payload = await response.json();
-    serverPersistenceAvailable = true;
-    
-    if (payload.state) {
-      mergeLoadedState(payload.state);
-      saveState();
-      return true;
-    }
-    
-    loadStateFromLocalStorage();
-    saveState();
-    return true;
-  } catch (error) {
-    serverPersistenceAvailable = false;
-    console.warn("Server persistence unavailable. Loading localStorage fallback.", error);
-    loadStateFromLocalStorage();
-    return false;
-  }
+  localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+  return true;
 }
 
 /* -------------------------------------------------------------
@@ -1678,78 +1707,413 @@ function setupPanelActions() {
   });
   
   btnReset.addEventListener("click", async () => {
-    if (confirm("Deseja redefinir a programação de todas as semanas para o padrão inicial?")) {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      
-      if (serverPersistenceAvailable) {
-        try {
-          await fetch(STATE_API_URL, { method: "DELETE" });
-        } catch (error) {
-          console.warn("Failed to reset server state.", error);
-        }
-      }
-      
-      window.location.reload();
+    if (confirm("Deseja redefinir a programação desta congregação?")) {
+      state = createCongregationState({ initial: false });
+      generatedWeeks = generateWeekOptions(state.startWeek, state.loadedWeeksCount);
+      loadWeekDataIntoUI(state.week);
+      renderWeekDropdownOptions();
+      await queueStateSave(activeCongregation.id, structuredClone(state));
     }
   });
 }
 
-function setupLoginOverlay() {
+function hideApplicationViews() {
+  document.getElementById("editor-view").classList.add("hidden");
+  document.getElementById("congregation-picker").classList.add("hidden");
+  document.getElementById("admin-view").classList.add("hidden");
+}
+
+function showLogin(message = "") {
+  hideApplicationViews();
   const overlay = document.getElementById("login-overlay");
-  const form = document.getElementById("login-form");
-  const passwordInput = document.getElementById("login-password");
-  const error = document.getElementById("login-error");
-  
-  if (!overlay || !form || !passwordInput || !error) return;
-  
-  if (sessionStorage.getItem(LOGIN_SESSION_KEY) === "true") {
-    overlay.classList.add("hidden");
-    return;
-  }
-  
-  passwordInput.focus();
-  
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    
-    if (passwordInput.value === LOGIN_PASSWORD) {
-      sessionStorage.setItem(LOGIN_SESSION_KEY, "true");
-      overlay.classList.add("hidden");
-      error.textContent = "";
-      passwordInput.value = "";
-      return;
-    }
-    
-    error.textContent = "Senha incorreta.";
-    passwordInput.select();
-  });
+  overlay.classList.remove("hidden");
+  document.getElementById("login-error").textContent = message;
+  window.setTimeout(() => document.getElementById("login-username").focus(), 0);
 }
 
-/* -------------------------------------------------------------
-   INITIALIZATION
-   ------------------------------------------------------------- */
-async function init() {
-  setupLoginOverlay();
-  
-  // 1. Load data from SQLite API, falling back to localStorage during local Vite dev.
-  await loadStateFromServer();
-  
-  // 2. Generate week list
-  generatedWeeks = generateWeekOptions(BASE_MONDAY_ISO, state.loadedWeeksCount);
-  
-  // 3. Fill dynamic values
+function initializeEditorOnce() {
+  if (editorInitialized) return;
   setupModalAndParticipants();
-  updatePeopleCountBadge();
   initializeTimeSelectOptions();
-  loadWeekDataIntoUI(state.week);
-  renderWeekDropdownOptions();
-  
-  // 4. Setup Listeners
   setupInlineEditableFields();
   setupSelectListeners();
   setupDynamicPartControls();
   setupCustomWeekSelector();
   setupPanelActions();
+  editorInitialized = true;
+}
+
+async function openCongregation(congregation) {
+  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+    pullUIValuesIntoState();
+    if (!await flushPendingSave()) return;
+  }
+  hideApplicationViews();
+  initializeEditorOnce();
+  try {
+    await loadStateFromServer(congregation);
+    generatedWeeks = generateWeekOptions(state.startWeek || BASE_MONDAY_ISO, state.loadedWeeksCount);
+    updatePeopleCountBadge();
+    loadWeekDataIntoUI(state.week);
+    renderWeekDropdownOptions();
+    document.getElementById("current-congregation-name").textContent = activeCongregation.name;
+    document.querySelector(".panel-footer p").textContent = `Congregação ${activeCongregation.name}`;
+    const canSwitch = currentUser.role === "admin" || accessibleCongregations.length > 1;
+    document.getElementById("btn-switch-congregation").classList.toggle("hidden", !canSwitch);
+    document.getElementById("btn-open-admin").classList.toggle("hidden", currentUser.role !== "admin");
+    document.getElementById("editor-view").classList.remove("hidden");
+    document.getElementById("login-overlay").classList.add("hidden");
+    history.replaceState({}, "", "/");
+  } catch (error) {
+    showConnectionError(error.message);
+    if (error.status === 401) showLogin("Sua sessão expirou. Entre novamente.");
+    else {
+      try { await refreshAccessibleCongregations(); } catch (refreshError) { console.warn(refreshError); }
+      await showCongregationPicker();
+    }
+  }
+}
+
+function renderCongregationPicker() {
+  const list = document.getElementById("congregation-picker-list");
+  const empty = document.getElementById("picker-empty");
+  list.innerHTML = "";
+  accessibleCongregations.forEach(congregation => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "picker-item";
+    const name = document.createElement("span");
+    name.textContent = congregation.name;
+    const action = document.createElement("small");
+    action.textContent = "Abrir programação →";
+    button.append(name, action);
+    button.addEventListener("click", () => openCongregation(congregation));
+    list.appendChild(button);
+  });
+  empty.classList.toggle("hidden", accessibleCongregations.length > 0);
+  document.getElementById("btn-picker-admin").classList.toggle("hidden", currentUser?.role !== "admin");
+}
+
+async function showCongregationPicker() {
+  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+    pullUIValuesIntoState();
+    if (!await flushPendingSave()) return;
+  }
+  hideApplicationViews();
+  renderCongregationPicker();
+  document.getElementById("congregation-picker").classList.remove("hidden");
+  document.getElementById("login-overlay").classList.add("hidden");
+  history.replaceState({}, "", "/");
+}
+
+function buildChecklist(container, items, selectedIds, prefix) {
+  container.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("span");
+    empty.className = "check-empty";
+    empty.textContent = "Nenhuma opção cadastrada.";
+    container.appendChild(empty);
+    return;
+  }
+  const selected = new Set(selectedIds.map(Number));
+  items.forEach(item => {
+    const label = document.createElement("label");
+    label.className = "check-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = item.id;
+    checkbox.id = `${prefix}-${item.id}`;
+    checkbox.checked = selected.has(Number(item.id));
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(item.name || item.username));
+    container.appendChild(label);
+  });
+}
+
+const checkedIds = container => [...container.querySelectorAll('input[type="checkbox"]:checked')].map(input => Number(input.value));
+
+async function loadAdminData() {
+  const [congregationPayload, userPayload] = await Promise.all([
+    requestJson("/api/admin/congregations"),
+    requestJson("/api/admin/users")
+  ]);
+  return { congregations: congregationPayload.congregations, users: userPayload.users };
+}
+
+function setCardMessage(card, message, isError = false) {
+  const element = card.querySelector(".card-message");
+  element.textContent = message;
+  element.classList.toggle("is-error", isError);
+}
+
+function renderAdminCongregations(congregations, users) {
+  const list = document.getElementById("admin-congregation-list");
+  list.innerHTML = "";
+  congregations.forEach(congregation => {
+    const card = document.createElement("article");
+    card.className = `admin-item ${congregation.active ? "" : "is-inactive"}`;
+    card.innerHTML = `
+      <div class="admin-item-title-row">
+        <input class="admin-name-input" value="" aria-label="Nome da congregação">
+        <span class="status-badge">${congregation.active ? "Ativa" : "Desativada"}</span>
+      </div>
+      <div class="item-checklist"></div>
+      <div class="admin-item-actions">
+        <button type="button" class="btn btn-primary btn-sm btn-save">Salvar alterações</button>
+        <button type="button" class="btn btn-secondary btn-sm btn-open" ${congregation.active ? "" : "disabled"}>Acessar programação</button>
+        <button type="button" class="btn btn-secondary btn-sm btn-toggle">${congregation.active ? "Desativar" : "Reativar"}</button>
+      </div>
+      <p class="card-message form-message" aria-live="polite"></p>`;
+    const nameInput = card.querySelector(".admin-name-input");
+    nameInput.value = congregation.name;
+    buildChecklist(card.querySelector(".item-checklist"), users, congregation.userIds, `cong-${congregation.id}`);
+    card.querySelector(".btn-save").addEventListener("click", async () => {
+      try {
+        await requestJson(`/api/admin/congregations/${congregation.id}`, {
+          method: "PATCH", body: JSON.stringify({ name: nameInput.value })
+        });
+        await requestJson(`/api/admin/congregations/${congregation.id}/access`, {
+          method: "PUT", body: JSON.stringify({ userIds: checkedIds(card.querySelector(".item-checklist")) })
+        });
+        setCardMessage(card, "Alterações salvas.");
+        await refreshAccessibleCongregations();
+      } catch (error) { setCardMessage(card, error.message, true); }
+    });
+    card.querySelector(".btn-open").addEventListener("click", () => openCongregation(congregation));
+    card.querySelector(".btn-toggle").addEventListener("click", async () => {
+      try {
+        await requestJson(`/api/admin/congregations/${congregation.id}`, {
+          method: "PATCH", body: JSON.stringify({ active: !congregation.active })
+        });
+        await showAdmin();
+      } catch (error) { setCardMessage(card, error.message, true); }
+    });
+    list.appendChild(card);
+  });
+}
+
+function renderAdminUsers(users, congregations) {
+  const list = document.getElementById("admin-user-list");
+  list.innerHTML = "";
+  users.forEach(user => {
+    const card = document.createElement("article");
+    card.className = `admin-item ${user.active ? "" : "is-inactive"}`;
+    card.innerHTML = `
+      <div class="admin-item-title-row">
+        <input class="admin-name-input" value="" aria-label="Nome do usuário">
+        <span class="status-badge">${user.active ? "Ativo" : "Desativado"}</span>
+      </div>
+      <div class="item-checklist"></div>
+      <div class="password-reset-row">
+        <input type="password" minlength="8" placeholder="Nova senha (mínimo 8 caracteres)" autocomplete="new-password">
+        <button type="button" class="btn btn-secondary btn-sm btn-password">Redefinir senha</button>
+      </div>
+      <div class="admin-item-actions">
+        <button type="button" class="btn btn-primary btn-sm btn-save">Salvar alterações</button>
+        <button type="button" class="btn btn-secondary btn-sm btn-toggle">${user.active ? "Desativar" : "Reativar"}</button>
+      </div>
+      <p class="card-message form-message" aria-live="polite"></p>`;
+    const usernameInput = card.querySelector(".admin-name-input");
+    usernameInput.value = user.username;
+    buildChecklist(card.querySelector(".item-checklist"), congregations, user.congregationIds, `user-${user.id}`);
+    card.querySelector(".btn-save").addEventListener("click", async () => {
+      try {
+        await requestJson(`/api/admin/users/${user.id}`, {
+          method: "PATCH", body: JSON.stringify({ username: usernameInput.value })
+        });
+        await requestJson(`/api/admin/users/${user.id}/access`, {
+          method: "PUT", body: JSON.stringify({ congregationIds: checkedIds(card.querySelector(".item-checklist")) })
+        });
+        setCardMessage(card, "Alterações salvas.");
+      } catch (error) { setCardMessage(card, error.message, true); }
+    });
+    card.querySelector(".btn-password").addEventListener("click", async () => {
+      const input = card.querySelector('.password-reset-row input');
+      try {
+        await requestJson(`/api/admin/users/${user.id}/password`, {
+          method: "POST", body: JSON.stringify({ password: input.value })
+        });
+        input.value = "";
+        setCardMessage(card, "Senha redefinida e sessões anteriores encerradas.");
+      } catch (error) { setCardMessage(card, error.message, true); }
+    });
+    card.querySelector(".btn-toggle").addEventListener("click", async () => {
+      try {
+        await requestJson(`/api/admin/users/${user.id}`, {
+          method: "PATCH", body: JSON.stringify({ active: !user.active })
+        });
+        await showAdmin();
+      } catch (error) { setCardMessage(card, error.message, true); }
+    });
+    list.appendChild(card);
+  });
+}
+
+async function refreshAccessibleCongregations() {
+  const payload = await requestJson("/api/auth/me");
+  currentUser = payload.user;
+  accessibleCongregations = payload.congregations;
+}
+
+async function showAdmin() {
+  if (currentUser?.role !== "admin") return;
+  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+    pullUIValuesIntoState();
+    if (!await flushPendingSave()) return;
+  }
+  hideApplicationViews();
+  document.getElementById("admin-view").classList.remove("hidden");
+  document.getElementById("login-overlay").classList.add("hidden");
+  history.replaceState({}, "", "/admin");
+  try {
+    const { congregations, users } = await loadAdminData();
+    buildChecklist(document.getElementById("new-congregation-users"), users.filter(user => user.active), [], "new-cong-user");
+    buildChecklist(document.getElementById("new-user-congregations"), congregations.filter(item => item.active), [], "new-user-cong");
+    renderAdminCongregations(congregations, users);
+    renderAdminUsers(users, congregations);
+    await refreshAccessibleCongregations();
+  } catch (error) {
+    if (error.status === 401) showLogin("Sua sessão expirou. Entre novamente.");
+    else showConnectionError(error.message);
+  }
+}
+
+async function routeAuthenticatedUser() {
+  document.getElementById("login-overlay").classList.add("hidden");
+  if (currentUser.role === "admin") {
+    await showAdmin();
+  } else if (accessibleCongregations.length === 1) {
+    await openCongregation(accessibleCongregations[0]);
+  } else {
+    await showCongregationPicker();
+  }
+}
+
+async function refreshSessionAndRoute() {
+  try {
+    const payload = await requestJson("/api/auth/me");
+    currentUser = payload.user;
+    accessibleCongregations = payload.congregations;
+    await routeAuthenticatedUser();
+  } catch (error) {
+    if (error.status === 401) showLogin();
+    else {
+      showLogin("Não foi possível conectar ao servidor.");
+      showConnectionError("Servidor indisponível. O editor não foi aberto para evitar perda ou mistura de dados.");
+    }
+  }
+}
+
+async function logout() {
+  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+    pullUIValuesIntoState();
+    if (!await flushPendingSave()) return;
+  }
+  try { await requestJson("/api/auth/logout", { method: "POST" }); } catch (error) { console.warn(error); }
+  currentUser = null;
+  accessibleCongregations = [];
+  activeCongregation = null;
+  showLogin();
+}
+
+function setupApplicationControls() {
+  const form = document.getElementById("login-form");
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const usernameInput = document.getElementById("login-username");
+    const passwordInput = document.getElementById("login-password");
+    const errorElement = document.getElementById("login-error");
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    errorElement.textContent = "";
+    try {
+      const payload = await requestJson("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: usernameInput.value, password: passwordInput.value })
+      });
+      currentUser = payload.user;
+      accessibleCongregations = payload.congregations;
+      passwordInput.value = "";
+      await routeAuthenticatedUser();
+    } catch (error) {
+      errorElement.textContent = error.message;
+      passwordInput.select();
+    } finally { submit.disabled = false; }
+  });
+
+  document.getElementById("btn-logout").addEventListener("click", logout);
+  document.getElementById("btn-picker-logout").addEventListener("click", logout);
+  document.getElementById("btn-admin-logout").addEventListener("click", logout);
+  document.getElementById("btn-switch-congregation").addEventListener("click", showCongregationPicker);
+  document.getElementById("btn-open-admin").addEventListener("click", showAdmin);
+  document.getElementById("btn-picker-admin").addEventListener("click", showAdmin);
+  document.getElementById("btn-admin-back").addEventListener("click", showCongregationPicker);
+
+  document.getElementById("form-add-congregation").addEventListener("submit", async event => {
+    event.preventDefault();
+    const input = document.getElementById("input-congregation-name");
+    const newUsername = document.getElementById("input-congregation-new-username");
+    const newPassword = document.getElementById("input-congregation-new-password");
+    const message = document.getElementById("congregation-form-message");
+    try {
+      await requestJson("/api/admin/congregations", {
+        method: "POST",
+        body: JSON.stringify({
+          name: input.value,
+          userIds: checkedIds(document.getElementById("new-congregation-users")),
+          newUser: newUsername.value || newPassword.value
+            ? { username: newUsername.value, password: newPassword.value }
+            : null
+        })
+      });
+      input.value = "";
+      newUsername.value = "";
+      newPassword.value = "";
+      message.textContent = "Congregação criada.";
+      message.classList.remove("is-error");
+      await showAdmin();
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add("is-error");
+    }
+  });
+
+  document.getElementById("form-add-user").addEventListener("submit", async event => {
+    event.preventDefault();
+    const username = document.getElementById("input-new-username");
+    const password = document.getElementById("input-new-password");
+    const message = document.getElementById("user-form-message");
+    try {
+      await requestJson("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          username: username.value,
+          password: password.value,
+          congregationIds: checkedIds(document.getElementById("new-user-congregations"))
+        })
+      });
+      username.value = "";
+      password.value = "";
+      message.textContent = "Usuário criado.";
+      message.classList.remove("is-error");
+      await showAdmin();
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add("is-error");
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+      pullUIValuesIntoState();
+      flushPendingSave();
+    }
+  });
+}
+
+async function init() {
+  setupApplicationControls();
+  await refreshSessionAndRoute();
 }
 
 window.addEventListener("DOMContentLoaded", init);

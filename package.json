@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test",
     "preview": "vite preview",
-    "start": "node server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "prod": "npm run build && npm start"
   },
   "devDependencies": {

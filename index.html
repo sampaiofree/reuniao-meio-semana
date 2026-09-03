@@ -12,7 +12,19 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app-container">
+  <div id="editor-view" class="app-view hidden">
+    <header class="context-bar print-hidden">
+      <div>
+        <span class="context-label">Congregação</span>
+        <strong id="current-congregation-name">—</strong>
+      </div>
+      <div class="context-actions">
+        <button type="button" id="btn-switch-congregation" class="btn-context hidden">Trocar congregação</button>
+        <button type="button" id="btn-open-admin" class="btn-context hidden">Administração</button>
+        <button type="button" id="btn-logout" class="btn-context">Sair</button>
+      </div>
+    </header>
+    <div class="app-container">
     <!-- Config Panel (Hidden during printing) -->
     <aside class="control-panel">
       <div class="panel-header">
@@ -252,7 +264,7 @@
 
       </div>
     </main>
-  </div>
+    </div>
 
   <!-- Modal for Managing Participants (Hidden during printing) -->
   <div id="modal-manage-people" class="modal-overlay hidden">
@@ -314,18 +326,117 @@
       </footer>
     </div>
   </div>
+  </div>
+
+  <section id="congregation-picker" class="app-screen hidden" aria-labelledby="picker-title">
+    <div class="screen-card picker-card">
+      <div class="screen-card-header">
+        <div>
+          <div class="login-kicker">Escolha o ambiente</div>
+          <h1 id="picker-title">Congregações</h1>
+          <p>Selecione a programação que deseja abrir.</p>
+        </div>
+        <button type="button" id="btn-picker-logout" class="btn btn-secondary">Sair</button>
+      </div>
+      <div id="congregation-picker-list" class="picker-list"></div>
+      <p id="picker-empty" class="empty-message hidden">Você ainda não possui acesso a nenhuma congregação.</p>
+      <button type="button" id="btn-picker-admin" class="btn btn-primary hidden">Abrir administração</button>
+    </div>
+  </section>
+
+  <section id="admin-view" class="admin-view hidden" aria-labelledby="admin-title">
+    <header class="admin-topbar">
+      <div>
+        <div class="login-kicker">Acesso administrativo</div>
+        <h1 id="admin-title">Congregações e usuários</h1>
+      </div>
+      <div class="context-actions">
+        <button type="button" id="btn-admin-back" class="btn-context">Programações</button>
+        <button type="button" id="btn-admin-logout" class="btn-context">Sair</button>
+      </div>
+    </header>
+
+    <main class="admin-content">
+      <section class="admin-panel">
+        <div class="admin-section-heading">
+          <div>
+            <h2>Congregações</h2>
+            <p>Cadastre congregações e determine quem pode acessá-las.</p>
+          </div>
+        </div>
+        <form id="form-add-congregation" class="admin-create-form">
+          <label>
+            Nome da congregação
+            <input id="input-congregation-name" type="text" maxlength="100" required autocomplete="off">
+          </label>
+          <fieldset>
+            <legend>Usuários com acesso</legend>
+            <div id="new-congregation-users" class="check-grid"></div>
+          </fieldset>
+          <details class="inline-user-create">
+            <summary>Criar também um novo usuário</summary>
+            <div class="form-row">
+              <label>
+                Usuário
+                <input id="input-congregation-new-username" type="text" minlength="3" maxlength="50" autocomplete="off">
+              </label>
+              <label>
+                Senha inicial
+                <input id="input-congregation-new-password" type="password" minlength="8" autocomplete="new-password">
+              </label>
+            </div>
+          </details>
+          <button type="submit" class="btn btn-primary">Criar congregação</button>
+          <p id="congregation-form-message" class="form-message" aria-live="polite"></p>
+        </form>
+        <div id="admin-congregation-list" class="admin-list"></div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-section-heading">
+          <div>
+            <h2>Usuários</h2>
+            <p>Crie contas, ajuste acessos e redefina senhas.</p>
+          </div>
+        </div>
+        <form id="form-add-user" class="admin-create-form">
+          <div class="form-row">
+            <label>
+              Usuário
+              <input id="input-new-username" type="text" minlength="3" maxlength="50" required autocomplete="off">
+            </label>
+            <label>
+              Senha inicial
+              <input id="input-new-password" type="password" minlength="8" required autocomplete="new-password">
+            </label>
+          </div>
+          <fieldset>
+            <legend>Congregações permitidas</legend>
+            <div id="new-user-congregations" class="check-grid"></div>
+          </fieldset>
+          <button type="submit" class="btn btn-primary">Criar usuário</button>
+          <p id="user-form-message" class="form-message" aria-live="polite"></p>
+        </form>
+        <div id="admin-user-list" class="admin-list"></div>
+      </section>
+    </main>
+  </section>
 
   <div id="login-overlay" class="login-overlay" aria-modal="true" role="dialog">
     <form id="login-form" class="login-card">
       <div class="login-kicker">Acesso restrito</div>
       <h1>Programação da reunião</h1>
-      <p>Digite a senha para visualizar e editar a programação.</p>
+      <p>Entre para visualizar e editar as congregações permitidas.</p>
+      <label class="login-label" for="login-username">Usuário</label>
+      <input id="login-username" type="text" autocomplete="username" required>
       <label class="login-label" for="login-password">Senha</label>
-      <input id="login-password" type="password" inputmode="numeric" autocomplete="current-password" required>
+      <input id="login-password" type="password" autocomplete="current-password" required>
       <p id="login-error" class="login-error" aria-live="polite"></p>
       <button type="submit" class="btn btn-primary login-button">Entrar</button>
     </form>
   </div>
+
+  <div id="connection-error" class="connection-error hidden" role="alert"></div>
 
   <!-- JavaScript -->
   <script type="module" src="main.js"></script>
