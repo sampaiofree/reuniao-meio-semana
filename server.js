@@ -447,7 +447,9 @@ export function createApplication({
   return { app, db, close: () => db.close() };
 }
 
-const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isDirectExecution = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isPm2Execution = process.env.pm_id !== undefined || process.env.NODE_APP_INSTANCE !== undefined;
+const isMainModule = isDirectExecution || isPm2Execution;
 if (isMainModule) {
   loadLocalEnv(path.join(__dirname, ".env"));
   const PORT = process.env.PORT || 3000;
