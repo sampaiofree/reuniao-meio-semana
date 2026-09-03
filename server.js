@@ -10,6 +10,20 @@ const __dirname = path.dirname(__filename);
 const SESSION_COOKIE = "midweek_session";
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 
+function loadLocalEnv(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const contents = fs.readFileSync(filePath, "utf8");
+  contents.split(/\r?\n/).forEach(line => {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || line.trimStart().startsWith("#") || process.env[match[1]] !== undefined) return;
+    let value = match[2];
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[match[1]] = value;
+  });
+}
+
 const normalizeUsername = value => String(value || "").trim().toLocaleLowerCase("pt-BR");
 const normalizeCongregationName = value => String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
 
@@ -435,6 +449,7 @@ export function createApplication({
 
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMainModule) {
+  loadLocalEnv(path.join(__dirname, ".env"));
   const PORT = process.env.PORT || 3000;
   const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
   const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "app.sqlite");
