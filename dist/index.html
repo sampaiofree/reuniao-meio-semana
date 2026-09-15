@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <!-- Style Sheet -->
-  <script type="module" crossorigin src="/assets/index-B2Ht-djY.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BRcuJ0-3.css">
+  <script type="module" crossorigin src="/assets/index-H-Fo0bEh.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DXj_1c66.css">
 </head>
 <body>
   <div id="editor-view" class="app-view hidden">
@@ -336,8 +336,8 @@
       </header>
 
       <div class="modal-body export-font-modal-body">
-        <p id="export-font-modal-description">Escolha o tamanho do texto na imagem. Se necessário, ele será reduzido automaticamente para caber na página.</p>
-        <p class="export-font-layout-hint">Acima de 120%, cada designação será organizada em duas linhas.</p>
+        <p id="export-font-modal-description">Escolha o tamanho do texto e o formato que deseja baixar.</p>
+        <p class="export-font-layout-hint">O formato mobile mantém o tamanho escolhido e cresce para baixo. No A4, a fonte pode ser reduzida para caber na página.</p>
         <div class="export-font-control">
           <div class="export-font-value-row">
             <span>Menor</span>
@@ -350,7 +350,10 @@
 
       <footer class="modal-footer export-font-modal-footer">
         <button type="button" id="btn-cancel-export-font" class="btn btn-secondary">Cancelar</button>
-        <button type="button" id="btn-confirm-export-font" class="btn btn-primary">Gerar imagem</button>
+        <div class="export-format-actions">
+          <button type="button" id="btn-download-export-a4" class="btn btn-secondary">Baixar formato A4</button>
+          <button type="button" id="btn-download-export-mobile" class="btn btn-primary">Baixar formato mobile</button>
+        </div>
       </footer>
     </div>
   </div>

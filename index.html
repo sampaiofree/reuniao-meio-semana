@@ -335,8 +335,8 @@
       </header>
 
       <div class="modal-body export-font-modal-body">
-        <p id="export-font-modal-description">Escolha o tamanho do texto na imagem. Se necessário, ele será reduzido automaticamente para caber na página.</p>
-        <p class="export-font-layout-hint">Acima de 120%, cada designação será organizada em duas linhas.</p>
+        <p id="export-font-modal-description">Escolha o tamanho do texto e o formato que deseja baixar.</p>
+        <p class="export-font-layout-hint">O formato mobile mantém o tamanho escolhido e cresce para baixo. No A4, a fonte pode ser reduzida para caber na página.</p>
         <div class="export-font-control">
           <div class="export-font-value-row">
             <span>Menor</span>
@@ -349,7 +349,10 @@
 
       <footer class="modal-footer export-font-modal-footer">
         <button type="button" id="btn-cancel-export-font" class="btn btn-secondary">Cancelar</button>
-        <button type="button" id="btn-confirm-export-font" class="btn btn-primary">Gerar imagem</button>
+        <div class="export-format-actions">
+          <button type="button" id="btn-download-export-a4" class="btn btn-secondary">Baixar formato A4</button>
+          <button type="button" id="btn-download-export-mobile" class="btn btn-primary">Baixar formato mobile</button>
+        </div>
       </footer>
     </div>
   </div>

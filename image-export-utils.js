@@ -40,3 +40,14 @@ export function getExportFontScaleCandidates(requestedScale) {
 export function usesLargeFontExportLayout(scale) {
   return normalizeExportFontScale(scale) > EXPORT_LARGE_FONT_THRESHOLD;
 }
+
+export function getMobileTypographyScales(requestedScale) {
+  const primary = normalizeExportFontScale(requestedScale);
+  const scaleDelta = primary - EXPORT_FONT_SCALE_DEFAULT;
+
+  return {
+    primary,
+    context: EXPORT_FONT_SCALE_DEFAULT + scaleDelta * 0.5,
+    secondary: EXPORT_FONT_SCALE_DEFAULT + scaleDelta * 0.25
+  };
+}

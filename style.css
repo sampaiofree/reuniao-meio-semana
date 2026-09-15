@@ -428,6 +428,58 @@ body {
   grid-column: 1 / -1 !important;
 }
 
+/* Long single-image export that mirrors the responsive schedule layout. */
+.image-export-sheet.image-export-mobile-sheet {
+  padding: 2rem 1.5rem !important;
+  gap: 1.25rem !important;
+  overflow: visible !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .sheet-sub-header {
+  grid-template-columns: 1fr !important;
+  gap: 1rem !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .sub-header-right,
+.image-export-sheet.image-export-mobile-sheet .part-assignee,
+.image-export-sheet.image-export-mobile-sheet .part-assignee-pair,
+.image-export-sheet.image-export-mobile-sheet .part-assignee-labeled {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .role-row {
+  grid-template-columns: 100px minmax(0, 1fr) !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .part-row {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0.5rem !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .part-details {
+  width: 100% !important;
+  padding-right: 0 !important;
+  flex-wrap: wrap !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .labeled-select {
+  grid-template-columns: 100px minmax(0, 1fr) !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .parts-container {
+  padding-left: 0.5rem !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .inline-labeled {
+  align-self: stretch !important;
+}
+
+.image-export-sheet.image-export-mobile-sheet .export-time-text {
+  margin-right: 0.2em !important;
+}
+
 /* Editable Elements Indication */
 .editable {
   outline: none;
@@ -1475,6 +1527,14 @@ body {
 }
 
 .export-font-modal-footer {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.export-format-actions {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getExportFontScaleCandidates,
+  getMobileTypographyScales,
   normalizeExportFontScale,
   usesLargeFontExportLayout
 } from "../image-export-utils.js";
@@ -27,4 +28,22 @@ test("uses the stacked export layout only above 120 percent", () => {
   assert.equal(usesLargeFontExportLayout(120), false);
   assert.equal(usesLargeFontExportLayout(125), true);
   assert.equal(usesLargeFontExportLayout(180), true);
+});
+
+test("emphasizes primary mobile text without oversizing context and labels", () => {
+  assert.deepEqual(getMobileTypographyScales(100), {
+    primary: 100,
+    context: 100,
+    secondary: 100
+  });
+  assert.deepEqual(getMobileTypographyScales(180), {
+    primary: 180,
+    context: 140,
+    secondary: 120
+  });
+  assert.deepEqual(getMobileTypographyScales(80), {
+    primary: 80,
+    context: 90,
+    secondary: 95
+  });
 });
