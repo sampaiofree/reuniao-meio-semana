@@ -1318,6 +1318,54 @@ body {
   gap: 1.5rem;
 }
 
+.export-font-modal {
+  width: min(92%, 460px);
+}
+
+.export-font-modal-body {
+  color: #d1d5db;
+  line-height: 1.5;
+}
+
+.export-font-control {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.export-font-value-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.export-font-value-row span:last-child {
+  text-align: right;
+}
+
+#export-font-size-value {
+  min-width: 4rem;
+  color: #ffffff;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+#export-font-size-range {
+  width: 100%;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.export-font-modal-footer {
+  gap: 0.75rem;
+}
+
 /* Add Person Form Styling */
 .modal-action-bar {
   background: rgba(15, 23, 42, 0.3);
@@ -1987,6 +2035,10 @@ body {
 
   .app-screen {
     padding: 1rem 0.5rem;
+  }
+
+  .export-font-modal-footer .btn {
+    flex: 1;
   }
 }
 

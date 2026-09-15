@@ -1,4 +1,10 @@
 import html2canvas from "html2canvas";
+import {
+  EXPORT_FONT_SCALE_DEFAULT,
+  EXPORT_FONT_SCALE_MIN,
+  getExportFontScaleCandidates,
+  normalizeExportFontScale
+} from "./image-export-utils.js";
 
 /* -------------------------------------------------------------
    DEFAULT DATA & CONFIG
@@ -39,6 +45,8 @@ const MINISTRY_PART_OPTIONS = [
 
 const DEFAULT_MINISTRY_TIMES = ["3", "4", "5"];
 const LEGACY_LOCAL_STORAGE_KEY = "midweek_schedule_state";
+const EXPORT_FONT_SCALE_STORAGE_KEY = "midweek_schedule_export_font_scale";
+const MOBILE_EXPORT_MEDIA_QUERY = "(max-width: 1024px)";
 
 /* -------------------------------------------------------------
    APPLICATION STATE
@@ -1552,6 +1560,7 @@ const A4_EXPORT_HEIGHT_PX = 3508;
 const A4_EXPORT_SCALE = 2;
 const A4_EXPORT_CSS_WIDTH = A4_EXPORT_WIDTH_PX / A4_EXPORT_SCALE;
 const A4_EXPORT_CSS_HEIGHT = A4_EXPORT_HEIGHT_PX / A4_EXPORT_SCALE;
+let imageExportInProgress = false;
 
 function replaceSelectsWithExportText(clonedSheet, selector, className, getText) {
   clonedSheet.querySelectorAll(selector).forEach(select => {
@@ -1568,9 +1577,60 @@ function replaceSelectsWithExportText(clonedSheet, selector, className, getText)
   });
 }
 
-function prepareSheetCloneForImageExport(clonedDocument) {
+function hasDirectVisibleText(element, view) {
+  const hasDirectText = [...element.childNodes].some(node => (
+    node.nodeType === 3 && node.textContent.trim()
+  ));
+  if (!hasDirectText) return false;
+
+  const style = view.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function getScalableTextElements(clonedSheet) {
+  const view = clonedSheet.ownerDocument.defaultView;
+  return [clonedSheet, ...clonedSheet.querySelectorAll("*")]
+    .filter(element => hasDirectVisibleText(element, view))
+    .map(element => ({
+      element,
+      baseFontSize: Number.parseFloat(view.getComputedStyle(element).fontSize)
+    }))
+    .filter(entry => Number.isFinite(entry.baseFontSize) && entry.baseFontSize > 0);
+}
+
+function applyExportFontScale(textElements, scale) {
+  textElements.forEach(({ element, baseFontSize }) => {
+    element.style.fontSize = `${baseFontSize * scale / 100}px`;
+  });
+}
+
+function exportedSheetContentFits(clonedSheet, textElements) {
+  const sheetRect = clonedSheet.getBoundingClientRect();
+  const sheetStyle = clonedSheet.ownerDocument.defaultView.getComputedStyle(clonedSheet);
+  const contentBottom = sheetRect.bottom - Number.parseFloat(sheetStyle.paddingBottom);
+  const lowestTextBottom = textElements.reduce((lowestBottom, { element }) => (
+    Math.max(lowestBottom, element.getBoundingClientRect().bottom)
+  ), sheetRect.top);
+
+  return clonedSheet.scrollHeight <= clonedSheet.clientHeight + 1
+    && lowestTextBottom <= contentBottom + 1;
+}
+
+function fitExportFontScale(clonedSheet, requestedScale) {
+  const textElements = getScalableTextElements(clonedSheet);
+
+  for (const scale of getExportFontScaleCandidates(requestedScale)) {
+    applyExportFontScale(textElements, scale);
+    void clonedSheet.offsetHeight;
+    if (exportedSheetContentFits(clonedSheet, textElements)) return scale;
+  }
+
+  return null;
+}
+
+function prepareSheetCloneForImageExport(clonedDocument, requestedFontScale) {
   const clonedSheet = clonedDocument.getElementById("schedule-sheet");
-  if (!clonedSheet) return;
+  if (!clonedSheet) throw new Error("Export sheet was not found in the cloned document.");
 
   clonedSheet.classList.add("image-export-sheet");
   clonedSheet.style.width = `${A4_EXPORT_CSS_WIDTH}px`;
@@ -1618,6 +1678,104 @@ function prepareSheetCloneForImageExport(clonedDocument) {
       });
     }
   });
+
+  const effectiveFontScale = fitExportFontScale(clonedSheet, requestedFontScale);
+  if (effectiveFontScale === null) {
+    throw new Error("EXPORT_CONTENT_DOES_NOT_FIT");
+  }
+
+  return effectiveFontScale;
+}
+
+function getStoredExportFontScale() {
+  try {
+    return normalizeExportFontScale(localStorage.getItem(EXPORT_FONT_SCALE_STORAGE_KEY));
+  } catch (error) {
+    console.warn("Could not read the saved export font size.", error);
+    return EXPORT_FONT_SCALE_DEFAULT;
+  }
+}
+
+function saveExportFontScale(scale) {
+  try {
+    localStorage.setItem(EXPORT_FONT_SCALE_STORAGE_KEY, String(scale));
+  } catch (error) {
+    console.warn("Could not save the export font size.", error);
+  }
+}
+
+function requestMobileExportFontScale() {
+  const modal = document.getElementById("modal-export-font-size");
+  const slider = document.getElementById("export-font-size-range");
+  const output = document.getElementById("export-font-size-value");
+  const closeButton = document.getElementById("btn-close-export-font-modal");
+  const cancelButton = document.getElementById("btn-cancel-export-font");
+  const confirmButton = document.getElementById("btn-confirm-export-font");
+  const previousFocus = document.activeElement;
+  const initialScale = getStoredExportFontScale();
+
+  slider.value = String(initialScale);
+  output.value = `${initialScale}%`;
+  output.textContent = `${initialScale}%`;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+
+  return new Promise(resolve => {
+    const updateOutput = () => {
+      const scale = normalizeExportFontScale(slider.value);
+      output.value = `${scale}%`;
+      output.textContent = `${scale}%`;
+    };
+
+    const finish = value => {
+      slider.removeEventListener("input", updateOutput);
+      closeButton.removeEventListener("click", cancel);
+      cancelButton.removeEventListener("click", cancel);
+      confirmButton.removeEventListener("click", confirm);
+      modal.removeEventListener("click", cancelFromBackdrop);
+      document.removeEventListener("keydown", handleDialogKeydown);
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      resolve(value);
+    };
+
+    const cancel = () => finish(null);
+    const confirm = () => {
+      const scale = normalizeExportFontScale(slider.value);
+      saveExportFontScale(scale);
+      finish(scale);
+    };
+    const cancelFromBackdrop = event => {
+      if (event.target === modal) cancel();
+    };
+    const handleDialogKeydown = event => {
+      if (event.key === "Escape") {
+        cancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusableElements = [closeButton, slider, cancelButton, confirmButton];
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    slider.addEventListener("input", updateOutput);
+    closeButton.addEventListener("click", cancel);
+    cancelButton.addEventListener("click", cancel);
+    confirmButton.addEventListener("click", confirm);
+    modal.addEventListener("click", cancelFromBackdrop);
+    document.addEventListener("keydown", handleDialogKeydown);
+    window.setTimeout(() => slider.focus(), 0);
+  });
 }
 
 function downloadCanvasAsPng(canvas, filename) {
@@ -1644,6 +1802,79 @@ function downloadCanvasAsPng(canvas, filename) {
   });
 }
 
+async function exportScheduleImage(requestedFontScale, btnPrint) {
+  pullUIValuesIntoState(); // Pull any final unblurred inputs before printing
+  saveState();
+
+  btnPrint.disabled = true;
+  btnPrint.textContent = "Gerando imagem...";
+
+  const sheet = document.getElementById("schedule-sheet");
+  const hiddenDuringExport = [...sheet.querySelectorAll(".print-hidden")];
+  hiddenDuringExport.forEach(el => {
+    el.dataset.previousDisplay = el.style.display;
+    el.style.display = "none";
+  });
+
+  let effectiveFontScale = requestedFontScale;
+  let contentDidNotFit = false;
+
+  try {
+    const canvas = await html2canvas(sheet, {
+      backgroundColor: "#ffffff",
+      scale: A4_EXPORT_SCALE,
+      width: A4_EXPORT_CSS_WIDTH,
+      height: A4_EXPORT_CSS_HEIGHT,
+      windowWidth: A4_EXPORT_CSS_WIDTH,
+      windowHeight: A4_EXPORT_CSS_HEIGHT,
+      useCORS: true,
+      onclone: clonedDocument => {
+        try {
+          effectiveFontScale = prepareSheetCloneForImageExport(
+            clonedDocument,
+            requestedFontScale
+          );
+        } catch (error) {
+          if (error.message === "EXPORT_CONTENT_DOES_NOT_FIT") contentDidNotFit = true;
+          throw error;
+        }
+      }
+    });
+
+    if (canvas.width !== A4_EXPORT_WIDTH_PX || canvas.height !== A4_EXPORT_HEIGHT_PX) {
+      throw new Error(
+        `Unexpected export size: ${canvas.width}x${canvas.height}px.`
+      );
+    }
+
+    await downloadCanvasAsPng(canvas, `programacao-${state.week}.png`);
+    if (effectiveFontScale < requestedFontScale) {
+      alert(`Para caber na página, o tamanho da fonte foi ajustado para ${effectiveFontScale}%.`);
+    }
+  } catch (error) {
+    console.error("Failed to export schedule image.", error);
+    if (contentDidNotFit) {
+      alert(`O conteúdo não cabe na página nem com a fonte em ${EXPORT_FONT_SCALE_MIN}%. Reduza o conteúdo e tente novamente.`);
+    } else {
+      alert("Não foi possível gerar a imagem. Tente novamente.");
+    }
+  } finally {
+    hiddenDuringExport.forEach(el => {
+      el.style.display = el.dataset.previousDisplay || "";
+      delete el.dataset.previousDisplay;
+    });
+    btnPrint.disabled = false;
+    btnPrint.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Baixar Imagem
+      `;
+  }
+}
+
 function setupPanelActions() {
   const btnFillParticipants = document.getElementById("btn-fill-participants");
   const btnPrint = document.getElementById("btn-print");
@@ -1654,55 +1885,18 @@ function setupPanelActions() {
   });
   
   btnPrint.addEventListener("click", async () => {
-    pullUIValuesIntoState(); // Pull any final unblurred inputs before printing
-    saveState();
-    
-    btnPrint.disabled = true;
-    btnPrint.textContent = "Gerando imagem...";
-    
-    const sheet = document.getElementById("schedule-sheet");
-    const hiddenDuringExport = [...sheet.querySelectorAll(".print-hidden")];
-    hiddenDuringExport.forEach(el => {
-      el.dataset.previousDisplay = el.style.display;
-      el.style.display = "none";
-    });
-    
+    if (imageExportInProgress) return;
+    imageExportInProgress = true;
+
     try {
-      const canvas = await html2canvas(sheet, {
-        backgroundColor: "#ffffff",
-        scale: A4_EXPORT_SCALE,
-        width: A4_EXPORT_CSS_WIDTH,
-        height: A4_EXPORT_CSS_HEIGHT,
-        windowWidth: A4_EXPORT_CSS_WIDTH,
-        windowHeight: A4_EXPORT_CSS_HEIGHT,
-        useCORS: true,
-        onclone: prepareSheetCloneForImageExport
-      });
+      const requestedFontScale = window.matchMedia(MOBILE_EXPORT_MEDIA_QUERY).matches
+        ? await requestMobileExportFontScale()
+        : EXPORT_FONT_SCALE_DEFAULT;
+      if (requestedFontScale === null) return;
 
-      if (canvas.width !== A4_EXPORT_WIDTH_PX || canvas.height !== A4_EXPORT_HEIGHT_PX) {
-        throw new Error(
-          `Unexpected export size: ${canvas.width}x${canvas.height}px.`
-        );
-      }
-
-      await downloadCanvasAsPng(canvas, `programacao-${state.week}.png`);
-    } catch (error) {
-      console.error("Failed to export schedule image.", error);
-      alert("Não foi possível gerar a imagem. Tente novamente.");
+      await exportScheduleImage(requestedFontScale, btnPrint);
     } finally {
-      hiddenDuringExport.forEach(el => {
-        el.style.display = el.dataset.previousDisplay || "";
-        delete el.dataset.previousDisplay;
-      });
-      btnPrint.disabled = false;
-      btnPrint.innerHTML = `
-          <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          Baixar Imagem
-        `;
+      imageExportInProgress = false;
     }
   });
   

@@ -326,6 +326,32 @@
       </footer>
     </div>
   </div>
+
+  <div id="modal-export-font-size" class="modal-overlay hidden" aria-hidden="true">
+    <div class="modal-container export-font-modal" role="dialog" aria-modal="true" aria-labelledby="export-font-modal-title" aria-describedby="export-font-modal-description">
+      <header class="modal-header">
+        <h2 id="export-font-modal-title">Tamanho da fonte</h2>
+        <button type="button" id="btn-close-export-font-modal" class="btn-close-icon" aria-label="Fechar">&times;</button>
+      </header>
+
+      <div class="modal-body export-font-modal-body">
+        <p id="export-font-modal-description">Escolha o tamanho do texto na imagem. Se necessário, ele será reduzido automaticamente para caber na página.</p>
+        <div class="export-font-control">
+          <div class="export-font-value-row">
+            <span>Menor</span>
+            <output id="export-font-size-value" for="export-font-size-range" aria-live="polite">100%</output>
+            <span>Maior</span>
+          </div>
+          <input type="range" id="export-font-size-range" min="80" max="120" step="5" value="100" aria-label="Tamanho da fonte da imagem">
+        </div>
+      </div>
+
+      <footer class="modal-footer export-font-modal-footer">
+        <button type="button" id="btn-cancel-export-font" class="btn btn-secondary">Cancelar</button>
+        <button type="button" id="btn-confirm-export-font" class="btn btn-primary">Gerar imagem</button>
+      </footer>
+    </div>
+  </div>
   </div>
 
   <section id="congregation-picker" class="app-screen hidden" aria-labelledby="picker-title">
