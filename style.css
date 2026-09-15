@@ -325,6 +325,109 @@ body {
   padding-left: 2rem !important;
 }
 
+/* Give large export text the full row width while keeping the A4 canvas. */
+.image-export-sheet.image-export-large-font {
+  padding-top: 2rem !important;
+  padding-bottom: 2rem !important;
+  gap: 0.7rem !important;
+}
+
+.image-export-sheet.image-export-large-font .sheet-header {
+  gap: 0.1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .sheet-sub-header {
+  grid-template-columns: 1fr !important;
+  gap: 0.35rem !important;
+  padding-bottom: 0.1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .sub-header-right {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 1rem !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.image-export-sheet.image-export-large-font .role-row {
+  grid-template-columns: 1fr !important;
+  align-items: start !important;
+  gap: 0.1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .role-label {
+  padding-right: 0 !important;
+  text-align: left !important;
+}
+
+.image-export-sheet.image-export-large-font .role-row .export-name-text {
+  padding-left: 1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .section-title {
+  margin-bottom: 0.2rem !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+.image-export-sheet.image-export-large-font .pre-section {
+  gap: 0.15rem !important;
+  padding-left: 1rem !important;
+  margin-bottom: 0.15rem !important;
+}
+
+.image-export-sheet.image-export-large-font .parts-container {
+  padding-left: 1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .part-row {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 0.15rem !important;
+  padding: 0.25rem 0 !important;
+}
+
+.image-export-sheet.image-export-large-font .part-details {
+  width: 100% !important;
+  padding-right: 0 !important;
+  flex-wrap: wrap !important;
+}
+
+.image-export-sheet.image-export-large-font .part-assignee,
+.image-export-sheet.image-export-large-font .part-assignee-pair,
+.image-export-sheet.image-export-large-font .part-assignee-labeled {
+  min-width: 0 !important;
+  width: 100% !important;
+  padding-left: 2rem !important;
+  text-align: left !important;
+}
+
+.image-export-sheet.image-export-large-font .part-assignee-pair {
+  align-items: flex-start !important;
+}
+
+.image-export-sheet.image-export-large-font .part-assignee-labeled {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-self: stretch !important;
+  gap: 0.2rem 1rem !important;
+}
+
+.image-export-sheet.image-export-large-font .labeled-select {
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: start !important;
+}
+
+.image-export-sheet.image-export-large-font .select-label {
+  padding-right: 0.4rem !important;
+  text-align: left !important;
+}
+
+.image-export-sheet.image-export-large-font .inline-labeled .labeled-select {
+  grid-column: 1 / -1 !important;
+}
+
 /* Editable Elements Indication */
 .editable {
   outline: none;
@@ -1325,6 +1428,15 @@ body {
 .export-font-modal-body {
   color: #d1d5db;
   line-height: 1.5;
+}
+
+.export-font-layout-hint {
+  padding: 0.7rem 0.8rem;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 0 6px 6px 0;
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.1);
+  font-size: 0.85rem;
 }
 
 .export-font-control {

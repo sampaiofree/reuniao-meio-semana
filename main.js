@@ -3,7 +3,8 @@ import {
   EXPORT_FONT_SCALE_DEFAULT,
   EXPORT_FONT_SCALE_MIN,
   getExportFontScaleCandidates,
-  normalizeExportFontScale
+  normalizeExportFontScale,
+  usesLargeFontExportLayout
 } from "./image-export-utils.js";
 
 /* -------------------------------------------------------------
@@ -1620,6 +1621,10 @@ function fitExportFontScale(clonedSheet, requestedScale) {
   const textElements = getScalableTextElements(clonedSheet);
 
   for (const scale of getExportFontScaleCandidates(requestedScale)) {
+    clonedSheet.classList.toggle(
+      "image-export-large-font",
+      usesLargeFontExportLayout(scale)
+    );
     applyExportFontScale(textElements, scale);
     void clonedSheet.offsetHeight;
     if (exportedSheetContentFits(clonedSheet, textElements)) return scale;

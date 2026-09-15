@@ -1,7 +1,8 @@
 export const EXPORT_FONT_SCALE_MIN = 80;
-export const EXPORT_FONT_SCALE_MAX = 120;
+export const EXPORT_FONT_SCALE_MAX = 180;
 export const EXPORT_FONT_SCALE_STEP = 5;
 export const EXPORT_FONT_SCALE_DEFAULT = 100;
+export const EXPORT_LARGE_FONT_THRESHOLD = 120;
 
 export function normalizeExportFontScale(value) {
   if (value === null || value === undefined || value === "") {
@@ -34,4 +35,8 @@ export function getExportFontScaleCandidates(requestedScale) {
   }
 
   return candidates;
+}
+
+export function usesLargeFontExportLayout(scale) {
+  return normalizeExportFontScale(scale) > EXPORT_LARGE_FONT_THRESHOLD;
 }

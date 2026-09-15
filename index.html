@@ -336,13 +336,14 @@
 
       <div class="modal-body export-font-modal-body">
         <p id="export-font-modal-description">Escolha o tamanho do texto na imagem. Se necessário, ele será reduzido automaticamente para caber na página.</p>
+        <p class="export-font-layout-hint">Acima de 120%, cada designação será organizada em duas linhas.</p>
         <div class="export-font-control">
           <div class="export-font-value-row">
             <span>Menor</span>
             <output id="export-font-size-value" for="export-font-size-range" aria-live="polite">100%</output>
             <span>Maior</span>
           </div>
-          <input type="range" id="export-font-size-range" min="80" max="120" step="5" value="100" aria-label="Tamanho da fonte da imagem">
+          <input type="range" id="export-font-size-range" min="80" max="180" step="5" value="100" aria-label="Tamanho da fonte da imagem">
         </div>
       </div>
 
