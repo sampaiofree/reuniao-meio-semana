@@ -4,6 +4,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { validateState } from "./state-validation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +127,13 @@ function initializeSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_access_congregation ON congregation_access(congregation_id);
   `);
+
+  db.transaction(() => {
+    if (!db.prepare("PRAGMA table_info(congregation_state)").all().some(column => column.name === "version")) {
+      db.exec("ALTER TABLE congregation_state ADD COLUMN version INTEGER NOT NULL DEFAULT 1");
+    }
+    db.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
+  })();
 
   if (db.prepare("SELECT 1 FROM schema_migrations WHERE version = 1").get()) return;
   db.transaction(() => {
@@ -263,23 +271,86 @@ export function createApplication({
     res.json({ ok: true });
   });
 
-  app.get("/api/congregations/:id/state", requireAuth, requireCongregationAccess, (req, res) => {
-    const row = db.prepare("SELECT data, updated_at FROM congregation_state WHERE congregation_id = ?").get(req.congregation.id);
-    if (!row) return res.json({ state: null, updatedAt: null, congregation: toCongregation(req.congregation) });
+  const storedState = row => {
     try {
-      res.json({ state: JSON.parse(row.data), updatedAt: row.updated_at, congregation: toCongregation(req.congregation) });
+      const state = JSON.parse(row.data);
+      if (validateState(state, { legacy: true })) throw new Error("Invalid state");
+      return state;
+    } catch {
+      throw Object.assign(new Error("Os dados armazenados desta congregação são inválidos. Nenhuma alteração foi salva."), { status: 500 });
+    }
+  };
+  const requireStateVersion = (req, res, next) => {
+    const header = req.get("If-Match");
+    if (!header) return res.status(428).json({ error: "Atualize a página para usar o salvamento protegido por versão." });
+    if (!/^"(?:0|[1-9]\d*)"$/.test(header) || !Number.isSafeInteger(Number(header.slice(1, -1)))) {
+      return res.status(400).json({ error: "Versão de salvamento inválida." });
+    }
+    req.stateVersion = Number(header.slice(1, -1));
+    next();
+  };
+  const checkVersion = (row, expected) => {
+    if ((row?.version ?? 0) !== expected) {
+      throw Object.assign(new Error("Outra sessão alterou os dados desta congregação. Recarregue a página antes de continuar."), { status: 409 });
+    }
+  };
+
+  app.get("/api/congregations/:id/state", requireAuth, requireCongregationAccess, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const row = db.prepare("SELECT data, updated_at, version FROM congregation_state WHERE congregation_id = ?").get(req.congregation.id);
+    if (!row) return res.json({ state: null, version: 0, updatedAt: null, congregation: toCongregation(req.congregation) });
+    try {
+      res.json({ state: storedState(row), version: row.version, updatedAt: row.updated_at, congregation: toCongregation(req.congregation) });
     } catch (error) {
       console.error("Failed to parse stored congregation state.", error);
       res.status(500).json({ error: "Os dados armazenados desta congregação são inválidos." });
     }
   });
-  app.put("/api/congregations/:id/state", requireAuth, requireCongregationAccess, (req, res) => {
-    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) return res.status(400).json({ error: "Era esperado um objeto JSON." });
-    const updatedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO congregation_state (congregation_id, data, updated_at) VALUES (?, ?, ?)
-      ON CONFLICT(congregation_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`)
-      .run(req.congregation.id, JSON.stringify(req.body), updatedAt);
-    res.json({ ok: true, updatedAt });
+  app.put("/api/congregations/:id/state", requireAuth, requireCongregationAccess, requireStateVersion, (req, res, next) => {
+    const error = validateState(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+      const result = db.transaction(() => {
+        const row = db.prepare("SELECT data, version FROM congregation_state WHERE congregation_id = ?").get(req.congregation.id);
+        checkVersion(row, req.stateVersion);
+        if (row) {
+          const previous = storedState(row);
+          const ids = new Set(req.body.participants.map(person => person.id));
+          const removesPeople = previous.participants
+            ? previous.participants.some(person => !ids.has(person.id))
+            : previous.names.some((name, index) => !ids.has(String(index + 1)));
+          if (removesPeople || Object.keys(previous.weeksData).some(week => !Object.hasOwn(req.body.weeksData, week))) {
+            throw Object.assign(new Error("O salvamento não pode remover pessoas ou semanas existentes. Exclua pessoas individualmente."), { status: 422 });
+          }
+        }
+        const version = (row?.version ?? 0) + 1;
+        const updatedAt = new Date().toISOString();
+        db.prepare(`INSERT INTO congregation_state (congregation_id, data, updated_at, version) VALUES (?, ?, ?, ?)
+          ON CONFLICT(congregation_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, version = excluded.version`)
+          .run(req.congregation.id, JSON.stringify(req.body), updatedAt, version);
+        return { ok: true, version, updatedAt };
+      }).immediate();
+      res.json(result);
+    } catch (error) { next(error); }
+  });
+  app.delete("/api/congregations/:id/participants/:participantId", requireAuth, requireCongregationAccess, requireStateVersion, (req, res, next) => {
+    try {
+      const result = db.transaction(() => {
+        const row = db.prepare("SELECT data, version FROM congregation_state WHERE congregation_id = ?").get(req.congregation.id);
+        checkVersion(row, req.stateVersion);
+        const state = row ? storedState(row) : null;
+        if (!state?.participants?.some(person => person.id === req.params.participantId)) {
+          throw Object.assign(new Error("Pessoa não encontrada."), { status: 404 });
+        }
+        state.participants = state.participants.filter(person => person.id !== req.params.participantId);
+        const version = row.version + 1;
+        const updatedAt = new Date().toISOString();
+        db.prepare("UPDATE congregation_state SET data = ?, version = ?, updated_at = ? WHERE congregation_id = ?")
+          .run(JSON.stringify(state), version, updatedAt, req.congregation.id);
+        return { ok: true, state, version, updatedAt };
+      }).immediate();
+      res.json(result);
+    } catch (error) { next(error); }
   });
 
   app.get("/api/admin/congregations", requireAdmin, (req, res) => {
@@ -440,9 +511,9 @@ export function createApplication({
   app.use(express.static(distDir));
   app.get(/.*/, (req, res) => res.sendFile("index.html", { root: distDir }));
   app.use((error, req, res, next) => {
-    console.error(error);
+    if (!error.status || error.status >= 500) console.error(error);
     if (res.headersSent) return next(error);
-    res.status(500).json({ error: "Erro interno do servidor." });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Erro interno do servidor." });
   });
   return { app, db, close: () => db.close() };
 }

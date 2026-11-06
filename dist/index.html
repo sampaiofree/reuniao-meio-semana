@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <!-- Style Sheet -->
-  <script type="module" crossorigin src="/assets/index-H-Fo0bEh.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DXj_1c66.css">
+  <script type="module" crossorigin src="/assets/index-CUjiV_fa.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D9fUXz_D.css">
 </head>
 <body>
   <div id="editor-view" class="app-view hidden">
@@ -20,6 +20,9 @@
         <strong id="current-congregation-name">—</strong>
       </div>
       <div class="context-actions">
+        <span id="save-status" class="save-status" role="status" aria-live="polite">Salvo</span>
+        <button type="button" id="btn-retry-save" class="btn-context hidden">Tentar salvar novamente</button>
+        <button type="button" id="btn-reload-state" class="btn-context hidden">Recarregar dados</button>
         <button type="button" id="btn-switch-congregation" class="btn-context hidden">Trocar congregação</button>
         <button type="button" id="btn-open-admin" class="btn-context hidden">Administração</button>
         <button type="button" id="btn-logout" class="btn-context">Sair</button>
@@ -65,12 +68,6 @@
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
           Baixar Imagem
-        </button>
-        <button id="btn-reset" class="btn btn-secondary" style="display: none;">
-          <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" >
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-          </svg>
-          Resetar Programação
         </button>
       </div>
       

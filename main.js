@@ -7,6 +7,8 @@ import {
   normalizeExportFontScale,
   usesLargeFontExportLayout
 } from "./image-export-utils.js";
+import { PARTICIPANT_PRIVILEGES, validateState } from "./state-validation.js";
+import { createPersistenceSession, readCongregationState } from "./state-persistence.js";
 
 /* -------------------------------------------------------------
    DEFAULT DATA & CONFIG
@@ -63,9 +65,10 @@ let state = {
 
 // Internal list of all generated week options
 let generatedWeeks = [];
-let saveStateTimeout = null;
-let saveRequestChain = Promise.resolve();
-let lastSaveError = null;
+let persistence = null;
+let editorReady = false;
+let editorOperation = false;
+let openingCongregation = false;
 let currentUser = null;
 let accessibleCongregations = [];
 let activeCongregation = null;
@@ -414,6 +417,8 @@ function enforceCurrentWeekMinistryPairRules() {
     const assistant = weekData.selections[assistantId];
     
     if (!student || !assistant) return;
+    // Former participants can remain assigned in historical schedules.
+    if (!getParticipantByName(student) || !getParticipantByName(assistant)) return;
     
     if (student === assistant || getParticipantGender(student) !== getParticipantGender(assistant)) {
       weekData.selections[assistantId] = "";
@@ -535,64 +540,60 @@ async function requestJson(url, options = {}) {
     error.status = response.status;
     throw error;
   }
-  clearConnectionError();
   return payload;
 }
 
-function queueStateSave(congregationId, stateSnapshot) {
-  saveRequestChain = saveRequestChain.then(async () => {
-    await requestJson(`/api/congregations/${congregationId}/state`, {
-      method: "PUT",
-      body: JSON.stringify(stateSnapshot)
-    });
-    lastSaveError = null;
-  }).catch(error => {
-    lastSaveError = error;
-    console.error("Failed to save congregation state.", error);
-    showConnectionError(error.status === 401
-      ? "Sua sessão expirou. Entre novamente para continuar."
-      : "Não foi possível salvar. Verifique sua conexão antes de sair.");
-    if (error.status === 401) showLogin();
-  });
-  return saveRequestChain;
+function setEditorLocked(locked) {
+  document.querySelector(".app-container").inert = locked;
+  document.getElementById("modal-manage-people").inert = locked;
 }
 
 function saveState() {
-  if (!activeCongregation) return;
-  const congregationId = activeCongregation.id;
-  window.clearTimeout(saveStateTimeout);
-  saveStateTimeout = window.setTimeout(() => {
-    saveStateTimeout = null;
-    queueStateSave(congregationId, structuredClone(state));
-  }, 350);
+  if (!editorReady || editorOperation || !persistence) return;
+  persistence.schedule(state);
 }
 
 async function flushPendingSave() {
-  if (saveStateTimeout && activeCongregation) {
-    window.clearTimeout(saveStateTimeout);
-    saveStateTimeout = null;
-    queueStateSave(activeCongregation.id, structuredClone(state));
+  return persistence ? persistence.flush() : true;
+}
+
+async function leaveEditor(allowOpening = false) {
+  if (editorOperation || (openingCongregation && !allowOpening)) return false;
+  if (!editorReady || !persistence) return true;
+  document.activeElement?.blur();
+  pullUIValuesIntoState();
+  saveState();
+  editorOperation = true;
+  setEditorLocked(true);
+  const saved = await flushPendingSave();
+  editorOperation = false;
+  if (!saved) {
+    setEditorLocked([409, 428, 401].includes(persistence.error?.status));
+    return false;
   }
-  await saveRequestChain;
-  return !lastSaveError;
+  persistence.close();
+  persistence = null;
+  editorReady = false;
+  document.getElementById("modal-manage-people").classList.add("hidden");
+  return true;
 }
 
 function mergeLoadedState(loadedState) {
   state = {
     ...state,
     ...loadedState,
-    weeksData: loadedState.weeksData || {}
+    weeksData: loadedState.weeksData
   };
   
   // Migrate from old state format (names array) to new format (participants array)
-  if (!state.participants && state.names) {
-    state.participants = state.names.map((name, index) => {
+  if (!loadedState.participants && loadedState.names) {
+    state.participants = loadedState.names.map((name, index) => {
       const matched = DEFAULT_PARTICIPANTS.find(dp => dp.nome.toLowerCase() === name.toLowerCase());
       if (matched) {
         return { ...matched, id: String(index + 1) };
       }
       return {
-        id: String(Date.now() + index),
+        id: String(index + 1),
         nome: name,
         sexo: "M",
         presidente: true,
@@ -610,19 +611,62 @@ function mergeLoadedState(loadedState) {
     });
   }
   
-  if (!Array.isArray(state.participants)) state.participants = [];
+  state.participants = state.participants.map(person => ({
+    ...Object.fromEntries(PARTICIPANT_PRIVILEGES.map(key => [key, false])),
+    sexo: "M",
+    ...person
+  }));
   state.startWeek = state.startWeek || BASE_MONDAY_ISO;
+  Object.entries(state.weeksData).forEach(([week, data]) => {
+    const defaults = getDefaultWeekData(week);
+    for (const key of ["location", "title", "theme", "selections", "inlineTexts", "times"]) {
+      if (data[key] === undefined) data[key] = defaults[key];
+    }
+    // Old schedules predate some required fields. Preserve every existing value.
+    for (const key of ["selections", "inlineTexts", "times"]) {
+      data[key] = { ...defaults[key], ...data[key] };
+    }
+    ensureWeekDataShape(data);
+  });
 }
 
 async function loadStateFromServer(congregation) {
-  const payload = await requestJson(`/api/congregations/${congregation.id}/state`);
-  activeCongregation = payload.congregation || congregation;
+  const payload = await readCongregationState(requestJson, congregation.id);
+  activeCongregation = payload.congregation;
   state = createCongregationState({ initial: Boolean(congregation.isInitial) });
-  if (payload.state) mergeLoadedState(payload.state);
-  if (!payload.state) {
-    getCurrentWeekData();
-    await queueStateSave(activeCongregation.id, structuredClone(state));
-  }
+  if (payload.state !== null) mergeLoadedState(payload.state);
+  getCurrentWeekData();
+  const validationError = validateState(state);
+  if (validationError) throw new Error(validationError);
+  const session = createPersistenceSession({
+    congregationId: congregation.id,
+    version: payload.version,
+    request: requestJson,
+    onStatus(status, error) {
+      if (persistence !== session) return;
+      const labels = { pending: "Alterações pendentes", saving: "Salvando", saved: "Salvo", error: "Falha ao salvar" };
+      const element = document.getElementById("save-status");
+      element.textContent = labels[status];
+      element.dataset.status = status;
+      document.getElementById("btn-reload-state").classList.toggle("hidden", status !== "error");
+      document.getElementById("btn-retry-save").classList.toggle("hidden", status !== "error" || [409, 428, 401].includes(error?.status));
+      if (status === "saved") clearConnectionError();
+    },
+    onError(error) {
+      if (persistence !== session) return;
+      showConnectionError(error.status === 401
+        ? "Sua sessão expirou. Suas alterações estão nesta aba. Recarregue e entre novamente para continuar."
+        : error.message || "Não foi possível salvar. Verifique sua conexão antes de sair.");
+      if ([409, 428, 401].includes(error.status)) setEditorLocked(true);
+    }
+  });
+  persistence = session;
+  if (payload.state === null && !await session.saveNow(state)) throw session.error;
+  document.getElementById("save-status").textContent = "Salvo";
+  document.getElementById("save-status").dataset.status = "saved";
+  document.getElementById("btn-reload-state").classList.add("hidden");
+  document.getElementById("btn-retry-save").classList.add("hidden");
+  clearConnectionError();
   localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
   return true;
 }
@@ -929,7 +973,7 @@ function populateNameSelects() {
         lastAssignment: getLastAssignmentSummary(participant.nome)
       }))
       .filter(item => {
-        if (!filterKey) return true; // fallback
+        if (item.participant.nome === currentVal || !filterKey) return true;
         if (item.participant[filterKey] !== true) return false;
         
         const ministryPart = getMinistryPartBySelectId(id, weekData);
@@ -967,12 +1011,14 @@ function populateNameSelects() {
       select.appendChild(opt);
     });
     
-    // Restore value only if the saved participant is still eligible for this role.
-    select.value = currentVal;
-    if (currentVal && select.value !== currentVal) {
-      weekData.selections[id] = "";
-      select.value = "";
+    // Keep assignments even after individual deletion or a privilege change.
+    if (currentVal && ![...select.options].some(option => option.value === currentVal)) {
+      const previous = document.createElement("option");
+      previous.value = currentVal;
+      previous.textContent = currentVal;
+      select.appendChild(previous);
     }
+    select.value = currentVal;
     
     if (!currentVal) {
       select.classList.add("unassigned");
@@ -1271,13 +1317,25 @@ function renderPeopleTable() {
     const btnDel = document.createElement("button");
     btnDel.className = "btn-delete";
     btnDel.textContent = "Excluir";
-    btnDel.addEventListener("click", () => {
-      if (confirm(`Deseja realmente excluir ${p.nome}?`)) {
-        state.participants = state.participants.filter(item => item.id !== p.id);
-        saveState();
+    btnDel.addEventListener("click", async () => {
+      if (!editorReady || editorOperation || !persistence) return;
+      const session = persistence;
+      pullUIValuesIntoState();
+      saveState();
+      editorOperation = true;
+      setEditorLocked(true);
+      try {
+        if (!await flushPendingSave()) return;
+        if (!confirm(`Deseja realmente excluir ${p.nome}? As programações existentes serão preservadas.`)) return;
+        const savedState = await session.deleteParticipant(p.id);
+        if (!savedState || persistence !== session) return;
+        state = savedState;
         renderPeopleTable();
         updatePeopleCountBadge();
         populateNameSelects();
+      } finally {
+        editorOperation = false;
+        setEditorLocked([409, 428, 401].includes(session.error?.status));
       }
     });
     
@@ -1348,7 +1406,7 @@ function setupModalAndParticipants() {
     }
     
     const newParticipant = {
-      id: Date.now().toString(),
+      id: createPartId("person"),
       nome: name,
       sexo: gender,
       presidente: false,
@@ -1990,7 +2048,6 @@ async function exportScheduleImage({ format, fontScale: requestedFontScale }, bt
 function setupPanelActions() {
   const btnFillParticipants = document.getElementById("btn-fill-participants");
   const btnPrint = document.getElementById("btn-print");
-  const btnReset = document.getElementById("btn-reset");
   
   btnFillParticipants.addEventListener("click", () => {
     fillEmptyParticipantSelects();
@@ -2012,15 +2069,6 @@ function setupPanelActions() {
     }
   });
   
-  btnReset.addEventListener("click", async () => {
-    if (confirm("Deseja redefinir a programação desta congregação?")) {
-      state = createCongregationState({ initial: false });
-      generatedWeeks = generateWeekOptions(state.startWeek, state.loadedWeeksCount);
-      loadWeekDataIntoUI(state.week);
-      renderWeekDropdownOptions();
-      await queueStateSave(activeCongregation.id, structuredClone(state));
-    }
-  });
 }
 
 function hideApplicationViews() {
@@ -2050,10 +2098,14 @@ function initializeEditorOnce() {
 }
 
 async function openCongregation(congregation) {
-  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
-    pullUIValuesIntoState();
-    if (!await flushPendingSave()) return;
+  if (openingCongregation || editorOperation) return;
+  openingCongregation = true;
+  if (!await leaveEditor(true)) {
+    openingCongregation = false;
+    return;
   }
+  editorReady = false;
+  setEditorLocked(true);
   hideApplicationViews();
   initializeEditorOnce();
   try {
@@ -2062,6 +2114,8 @@ async function openCongregation(congregation) {
     updatePeopleCountBadge();
     loadWeekDataIntoUI(state.week);
     renderWeekDropdownOptions();
+    editorReady = true;
+    setEditorLocked(false);
     document.getElementById("current-congregation-name").textContent = activeCongregation.name;
     document.querySelector(".panel-footer p").textContent = `Congregação ${activeCongregation.name}`;
     const canSwitch = currentUser.role === "admin" || accessibleCongregations.length > 1;
@@ -2071,12 +2125,19 @@ async function openCongregation(congregation) {
     document.getElementById("login-overlay").classList.add("hidden");
     history.replaceState({}, "", "/");
   } catch (error) {
+    editorReady = false;
+    persistence?.close();
+    persistence = null;
+    activeCongregation = null;
+    openingCongregation = false;
     showConnectionError(error.message);
     if (error.status === 401) showLogin("Sua sessão expirou. Entre novamente.");
     else {
       try { await refreshAccessibleCongregations(); } catch (refreshError) { console.warn(refreshError); }
       await showCongregationPicker();
     }
+  } finally {
+    openingCongregation = false;
   }
 }
 
@@ -2101,10 +2162,7 @@ function renderCongregationPicker() {
 }
 
 async function showCongregationPicker() {
-  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
-    pullUIValuesIntoState();
-    if (!await flushPendingSave()) return;
-  }
+  if (!await leaveEditor()) return;
   hideApplicationViews();
   renderCongregationPicker();
   document.getElementById("congregation-picker").classList.remove("hidden");
@@ -2263,10 +2321,7 @@ async function refreshAccessibleCongregations() {
 
 async function showAdmin() {
   if (currentUser?.role !== "admin") return;
-  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
-    pullUIValuesIntoState();
-    if (!await flushPendingSave()) return;
-  }
+  if (!await leaveEditor()) return;
   hideApplicationViews();
   document.getElementById("admin-view").classList.remove("hidden");
   document.getElementById("login-overlay").classList.add("hidden");
@@ -2311,10 +2366,7 @@ async function refreshSessionAndRoute() {
 }
 
 async function logout() {
-  if (activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
-    pullUIValuesIntoState();
-    if (!await flushPendingSave()) return;
-  }
+  if (!await leaveEditor()) return;
   try { await requestJson("/api/auth/logout", { method: "POST" }); } catch (error) { console.warn(error); }
   currentUser = null;
   accessibleCongregations = [];
@@ -2354,6 +2406,25 @@ function setupApplicationControls() {
   document.getElementById("btn-open-admin").addEventListener("click", showAdmin);
   document.getElementById("btn-picker-admin").addEventListener("click", showAdmin);
   document.getElementById("btn-admin-back").addEventListener("click", showCongregationPicker);
+  document.getElementById("btn-reload-state").addEventListener("click", () => {
+    if (editorOperation || openingCongregation) return;
+    if (confirm("Recarregar os dados do servidor? As alterações não salvas desta aba serão descartadas.")) {
+      persistence?.close();
+      persistence = null;
+      window.location.reload();
+    }
+  });
+  document.getElementById("btn-retry-save").addEventListener("click", async () => {
+    if (!editorReady || editorOperation || !persistence) return;
+    pullUIValuesIntoState();
+    editorOperation = true;
+    setEditorLocked(true);
+    try { await persistence.retry(state); }
+    finally {
+      editorOperation = false;
+      setEditorLocked([409, 428, 401].includes(persistence.error?.status));
+    }
+  });
 
   document.getElementById("form-add-congregation").addEventListener("submit", async event => {
     event.preventDefault();
@@ -2410,9 +2481,16 @@ function setupApplicationControls() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden" && activeCongregation && !document.getElementById("editor-view").classList.contains("hidden")) {
+    if (document.visibilityState === "hidden" && editorReady && !editorOperation && !document.getElementById("editor-view").classList.contains("hidden")) {
       pullUIValuesIntoState();
-      flushPendingSave();
+      saveState();
+      void flushPendingSave();
+    }
+  });
+  window.addEventListener("beforeunload", event => {
+    if (persistence?.hasUnsavedChanges) {
+      event.preventDefault();
+      event.returnValue = "";
     }
   });
 }

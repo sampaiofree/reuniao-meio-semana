@@ -2176,6 +2176,19 @@ body {
   line-height: 1.4;
 }
 
+.save-status {
+  align-self: center;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: #a7f3d0;
+}
+
+.save-status[data-status="pending"],
+.save-status[data-status="saving"] { color: #fde68a; }
+.save-status[data-status="error"] { color: #fca5a5; }
+
+[inert] { opacity: 0.7; }
+
 @media (max-width: 700px) {
   .context-bar,
   .admin-topbar,
